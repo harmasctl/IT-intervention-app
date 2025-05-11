@@ -39,6 +39,17 @@ export default function SignUpScreen() {
       return;
     }
 
+    // Basic validation
+    if (password.length < 6) {
+      Alert.alert("Error", "Password must be at least 6 characters long");
+      return;
+    }
+
+    if (!email.includes("@") || !email.includes(".")) {
+      Alert.alert("Error", "Please enter a valid email address");
+      return;
+    }
+
     setLoading(true);
     try {
       const { error } = await signUp(email, password, { name, role });

@@ -46,43 +46,61 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    return { error };
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      return { error };
+    } catch (error) {
+      console.error("Sign in error:", error);
+      return {
+        error: {
+          message: "An error occurred during sign in. Please try again later.",
+        },
+      };
+    }
   };
 
   const signUp = async (email: string, password: string, userData: any) => {
-    const { error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          name: userData.name,
-          role: userData.role,
+    try {
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            name: userData.name,
+            role: userData.role,
+          },
         },
-      },
-    });
+      });
 
-    if (signUpError) return { error: signUpError };
+      if (signUpError) return { error: signUpError };
 
-    // Create user profile in the users table
-    if (user) {
-      const { error: profileError } = await supabase.from("users").insert([
-        {
-          id: user.id,
-          email: email,
-          name: userData.name,
-          role: userData.role,
-          avatar_url: userData.avatar_url || null,
+      // Create user profile in the users table
+      if (data?.user) {
+        const { error: profileError } = await supabase.from("users").insert([
+          {
+            id: data.user.id,
+            email: email,
+            name: userData.name,
+            role: userData.role,
+            avatar_url: userData.avatar_url || null,
+          },
+        ]);
+
+        if (profileError) return { error: profileError };
+      }
+
+      return { error: null };
+    } catch (error) {
+      console.error("Sign up error:", error);
+      return {
+        error: {
+          message: "An error occurred during sign up. Please try again later.",
         },
-      ]);
-
-      return { error: profileError };
+      };
     }
-
-    return { error: null };
   };
 
   const signOut = async () => {

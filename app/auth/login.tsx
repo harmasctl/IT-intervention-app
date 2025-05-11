@@ -30,11 +30,16 @@ export default function LoginScreen() {
     try {
       const { error } = await signIn(email, password);
       if (error) {
-        Alert.alert("Login Failed", error.message);
+        console.log("Login error:", error);
+        Alert.alert(
+          "Login Failed",
+          error.message || "Invalid email or password",
+        );
       } else {
         router.replace("/");
       }
     } catch (error: any) {
+      console.error("Login exception:", error);
       Alert.alert("Error", error.message || "An unexpected error occurred");
     } finally {
       setLoading(false);
