@@ -1,0 +1,539 @@
+import React, { useState, useEffect } from "react";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  TextInput,
+  FlatList,
+  ActivityIndicator,
+  Modal,
+  Alert,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { StatusBar } from "expo-status-bar";
+import { useRouter } from "expo-router";
+import {
+  ArrowLeft,
+  Plus,
+  Search,
+  Building2,
+  Phone,
+  Mail,
+  MapPin,
+  Edit,
+  Trash2,
+} from "lucide-react-native";
+import { supabase } from "../../lib/supabase";
+import EquipmentTabs from "../../components/EquipmentTabs";
+
+type Supplier = {
+  id: string;
+  name: string;
+  contact_person?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+};
+
+export default function SuppliersScreen() {
+  const router = useRouter();
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(
+    null,
+  );
+
+  // Form states
+  const [name, setName] = useState("");
+  const [contactPerson, setContactPerson] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [address, setAddress] = useState("");
+
+  useEffect(() => {
+    fetchSuppliers();
+  }, []);
+
+  const fetchSuppliers = async () => {
+    try {
+      setLoading(true);
+      // In a real app, this would fetch from Supabase
+      // For now, using mock data
+
+      // Simulate API delay
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      const mockSuppliers: Supplier[] = [
+        {
+          id: "1",
+          name: "CoolTech Supplies",
+          contact_person: "John Smith",
+          email: "john@cooltech.com",
+          phone: "555-123-4567",
+          address: "123 Main St, Anytown, USA",
+        },
+        {
+          id: "2",
+          name: "Tech Instruments Inc.",
+          contact_person: "Sarah Johnson",
+          email: "sarah@techinstruments.com",
+          phone: "555-987-6543",
+          address: "456 Tech Blvd, Innovation City, USA",
+        },
+        {
+          id: "3",
+          name: "CleanPro Solutions",
+          contact_person: "Mike Davis",
+          email: "mike@cleanpro.com",
+          phone: "555-456-7890",
+          address: "789 Clean Ave, Sparkle Town, USA",
+        },
+        {
+          id: "4",
+          name: "ElectroParts Ltd.",
+          contact_person: "Lisa Chen",
+          email: "lisa@electroparts.com",
+          phone: "555-789-0123",
+          address: "321 Circuit Rd, Voltage City, USA",
+        },
+        {
+          id: "5",
+          name: "Kitchen Equipment Co.",
+          contact_person: "David Wilson",
+          email: "david@kitchenequip.com",
+          phone: "555-234-5678",
+          address: "567 Culinary Blvd, Foodville, USA",
+        },
+      ];
+
+      setSuppliers(mockSuppliers);
+    } catch (error) {
+      console.error("Error fetching suppliers:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddSupplier = () => {
+    // Reset form fields
+    setName("");
+    setContactPerson("");
+    setEmail("");
+    setPhone("");
+    setAddress("");
+    setShowAddModal(true);
+  };
+
+  const handleEditSupplier = (supplier: Supplier) => {
+    setSelectedSupplier(supplier);
+    setName(supplier.name);
+    setContactPerson(supplier.contact_person || "");
+    setEmail(supplier.email || "");
+    setPhone(supplier.phone || "");
+    setAddress(supplier.address || "");
+    setShowEditModal(true);
+  };
+
+  const handleDeleteSupplier = (id: string) => {
+    Alert.alert(
+      "Delete Supplier",
+      "Are you sure you want to delete this supplier?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              // In a real app, this would delete from Supabase
+              // const { error } = await supabase
+              //   .from("suppliers")
+              //   .delete()
+              //   .eq("id", id);
+
+              // if (error) throw error;
+
+              // Update local state
+              setSuppliers(suppliers.filter((supplier) => supplier.id !== id));
+              Alert.alert("Success", "Supplier deleted successfully");
+            } catch (error) {
+              console.error("Error deleting supplier:", error);
+              Alert.alert("Error", "Failed to delete supplier");
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleSubmitAdd = async () => {
+    if (!name) {
+      Alert.alert("Error", "Please enter supplier name");
+      return;
+    }
+
+    try {
+      const newSupplier = {
+        id: Date.now().toString(),
+        name,
+        contact_person: contactPerson || undefined,
+        email: email || undefined,
+        phone: phone || undefined,
+        address: address || undefined,
+      };
+
+      // In a real app, this would save to Supabase
+      // const { data, error } = await supabase
+      //   .from("suppliers")
+      //   .insert([newSupplier]);
+
+      // if (error) throw error;
+
+      // Update local state
+      setSuppliers([...suppliers, newSupplier]);
+      setShowAddModal(false);
+      Alert.alert("Success", "Supplier added successfully");
+    } catch (error) {
+      console.error("Error adding supplier:", error);
+      Alert.alert("Error", "Failed to add supplier");
+    }
+  };
+
+  const handleSubmitEdit = async () => {
+    if (!selectedSupplier || !name) {
+      Alert.alert("Error", "Please enter supplier name");
+      return;
+    }
+
+    try {
+      const updatedSupplier = {
+        ...selectedSupplier,
+        name,
+        contact_person: contactPerson || undefined,
+        email: email || undefined,
+        phone: phone || undefined,
+        address: address || undefined,
+      };
+
+      // In a real app, this would update in Supabase
+      // const { error } = await supabase
+      //   .from("suppliers")
+      //   .update(updatedSupplier)
+      //   .eq("id", selectedSupplier.id);
+
+      // if (error) throw error;
+
+      // Update local state
+      setSuppliers(
+        suppliers.map((supplier) =>
+          supplier.id === selectedSupplier.id ? updatedSupplier : supplier,
+        ),
+      );
+      setShowEditModal(false);
+      Alert.alert("Success", "Supplier updated successfully");
+    } catch (error) {
+      console.error("Error updating supplier:", error);
+      Alert.alert("Error", "Failed to update supplier");
+    }
+  };
+
+  const filteredSuppliers = suppliers.filter((supplier) => {
+    return (
+      supplier.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (supplier.contact_person &&
+        supplier.contact_person
+          .toLowerCase()
+          .includes(searchQuery.toLowerCase())) ||
+      (supplier.email &&
+        supplier.email.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
+  });
+
+  const renderSupplierItem = ({ item }: { item: Supplier }) => (
+    <View className="bg-white rounded-lg p-4 mb-3 shadow-sm border border-gray-100">
+      <View className="flex-row justify-between items-start">
+        <Text className="font-bold text-lg text-gray-800">{item.name}</Text>
+        <View className="flex-row">
+          <TouchableOpacity
+            className="p-2 mr-2"
+            onPress={() => handleEditSupplier(item)}
+          >
+            <Edit size={18} color="#f59e0b" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            className="p-2"
+            onPress={() => handleDeleteSupplier(item.id)}
+          >
+            <Trash2 size={18} color="#dc2626" />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {item.contact_person && (
+        <Text className="text-gray-700 mt-2">
+          Contact: {item.contact_person}
+        </Text>
+      )}
+
+      {item.email && (
+        <View className="flex-row items-center mt-2">
+          <Mail size={16} color="#6b7280" />
+          <Text className="text-gray-700 ml-2">{item.email}</Text>
+        </View>
+      )}
+
+      {item.phone && (
+        <View className="flex-row items-center mt-2">
+          <Phone size={16} color="#6b7280" />
+          <Text className="text-gray-700 ml-2">{item.phone}</Text>
+        </View>
+      )}
+
+      {item.address && (
+        <View className="flex-row items-center mt-2">
+          <MapPin size={16} color="#6b7280" />
+          <Text className="text-gray-700 ml-2">{item.address}</Text>
+        </View>
+      )}
+    </View>
+  );
+
+  return (
+    <SafeAreaView className="flex-1 bg-white">
+      <StatusBar style="auto" />
+
+      {/* Header */}
+      <View className="flex-row justify-between items-center px-4 py-3 border-b border-gray-200">
+        <TouchableOpacity
+          onPress={() => router.back()}
+          className="flex-row items-center"
+        >
+          <ArrowLeft size={20} color="#3b82f6" />
+          <Text className="text-blue-500 ml-1">Back</Text>
+        </TouchableOpacity>
+        <Text className="text-xl font-bold text-blue-800">Stock Suppliers</Text>
+        <TouchableOpacity
+          className="bg-blue-600 p-2 rounded-full"
+          onPress={handleAddSupplier}
+        >
+          <Plus size={20} color="white" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Search */}
+      <View className="p-4 border-b border-gray-200">
+        <View className="flex-row items-center bg-gray-100 rounded-lg px-3 py-2">
+          <Search size={20} color="#6b7280" />
+          <TextInput
+            className="flex-1 ml-2 py-1"
+            placeholder="Search suppliers"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+        </View>
+      </View>
+
+      {/* Suppliers list */}
+      <View className="flex-1 p-4 bg-gray-50">
+        {loading ? (
+          <View className="flex-1 justify-center items-center">
+            <ActivityIndicator size="large" color="#1e40af" />
+            <Text className="mt-2 text-gray-600">Loading suppliers...</Text>
+          </View>
+        ) : filteredSuppliers.length > 0 ? (
+          <FlatList
+            data={filteredSuppliers}
+            renderItem={renderSupplierItem}
+            keyExtractor={(item) => item.id}
+            showsVerticalScrollIndicator={false}
+          />
+        ) : (
+          <View className="flex-1 justify-center items-center">
+            <Building2 size={48} color="#9ca3af" />
+            <Text className="mt-4 text-gray-500 text-center">
+              No suppliers found
+            </Text>
+            <TouchableOpacity
+              className="mt-4 bg-blue-600 px-4 py-2 rounded-lg"
+              onPress={handleAddSupplier}
+            >
+              <Text className="text-white font-medium">Add Supplier</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+
+      {/* Add Supplier Modal */}
+      <Modal
+        visible={showAddModal}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setShowAddModal(false)}
+      >
+        <SafeAreaView className="flex-1 bg-white">
+          <View className="flex-row justify-between items-center px-4 py-3 border-b border-gray-200">
+            <TouchableOpacity onPress={() => setShowAddModal(false)}>
+              <Text className="text-blue-600 font-medium">Cancel</Text>
+            </TouchableOpacity>
+            <Text className="text-xl font-bold text-blue-800">
+              Add Supplier
+            </Text>
+            <TouchableOpacity onPress={handleSubmitAdd}>
+              <Text className="text-blue-600 font-medium">Save</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View className="p-4">
+            <View className="mb-4">
+              <Text className="text-gray-700 mb-2 font-medium">
+                Supplier Name *
+              </Text>
+              <TextInput
+                className="border border-gray-300 rounded-lg p-3 bg-white"
+                placeholder="Enter supplier name"
+                value={name}
+                onChangeText={setName}
+              />
+            </View>
+
+            <View className="mb-4">
+              <Text className="text-gray-700 mb-2 font-medium">
+                Contact Person
+              </Text>
+              <TextInput
+                className="border border-gray-300 rounded-lg p-3 bg-white"
+                placeholder="Enter contact person name"
+                value={contactPerson}
+                onChangeText={setContactPerson}
+              />
+            </View>
+
+            <View className="mb-4">
+              <Text className="text-gray-700 mb-2 font-medium">Email</Text>
+              <TextInput
+                className="border border-gray-300 rounded-lg p-3 bg-white"
+                placeholder="Enter email address"
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            </View>
+
+            <View className="mb-4">
+              <Text className="text-gray-700 mb-2 font-medium">Phone</Text>
+              <TextInput
+                className="border border-gray-300 rounded-lg p-3 bg-white"
+                placeholder="Enter phone number"
+                value={phone}
+                onChangeText={setPhone}
+                keyboardType="phone-pad"
+              />
+            </View>
+
+            <View className="mb-4">
+              <Text className="text-gray-700 mb-2 font-medium">Address</Text>
+              <TextInput
+                className="border border-gray-300 rounded-lg p-3 bg-white h-24"
+                placeholder="Enter address"
+                value={address}
+                onChangeText={setAddress}
+                multiline
+                textAlignVertical="top"
+              />
+            </View>
+          </View>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Edit Supplier Modal */}
+      <Modal
+        visible={showEditModal}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setShowEditModal(false)}
+      >
+        <SafeAreaView className="flex-1 bg-white">
+          <View className="flex-row justify-between items-center px-4 py-3 border-b border-gray-200">
+            <TouchableOpacity onPress={() => setShowEditModal(false)}>
+              <Text className="text-blue-600 font-medium">Cancel</Text>
+            </TouchableOpacity>
+            <Text className="text-xl font-bold text-blue-800">
+              Edit Supplier
+            </Text>
+            <TouchableOpacity onPress={handleSubmitEdit}>
+              <Text className="text-blue-600 font-medium">Save</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View className="p-4">
+            <View className="mb-4">
+              <Text className="text-gray-700 mb-2 font-medium">
+                Supplier Name *
+              </Text>
+              <TextInput
+                className="border border-gray-300 rounded-lg p-3 bg-white"
+                placeholder="Enter supplier name"
+                value={name}
+                onChangeText={setName}
+              />
+            </View>
+
+            <View className="mb-4">
+              <Text className="text-gray-700 mb-2 font-medium">
+                Contact Person
+              </Text>
+              <TextInput
+                className="border border-gray-300 rounded-lg p-3 bg-white"
+                placeholder="Enter contact person name"
+                value={contactPerson}
+                onChangeText={setContactPerson}
+              />
+            </View>
+
+            <View className="mb-4">
+              <Text className="text-gray-700 mb-2 font-medium">Email</Text>
+              <TextInput
+                className="border border-gray-300 rounded-lg p-3 bg-white"
+                placeholder="Enter email address"
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            </View>
+
+            <View className="mb-4">
+              <Text className="text-gray-700 mb-2 font-medium">Phone</Text>
+              <TextInput
+                className="border border-gray-300 rounded-lg p-3 bg-white"
+                placeholder="Enter phone number"
+                value={phone}
+                onChangeText={setPhone}
+                keyboardType="phone-pad"
+              />
+            </View>
+
+            <View className="mb-4">
+              <Text className="text-gray-700 mb-2 font-medium">Address</Text>
+              <TextInput
+                className="border border-gray-300 rounded-lg p-3 bg-white h-24"
+                placeholder="Enter address"
+                value={address}
+                onChangeText={setAddress}
+                multiline
+                textAlignVertical="top"
+              />
+            </View>
+          </View>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Bottom Tabs */}
+      <EquipmentTabs activeTab="suppliers" />
+    </SafeAreaView>
+  );
+}

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Text, TouchableOpacity, ScrollView } from "react-native";
+import { View, Text, TouchableOpacity, ScrollView, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { useRouter } from "expo-router";
@@ -12,6 +12,7 @@ import {
   AlertCircle,
   Wrench,
   User,
+  BarChart3,
 } from "lucide-react-native";
 import TicketList from "../components/TicketList";
 
@@ -214,6 +215,15 @@ export default function Dashboard() {
             <Wrench size={20} color="#4b5563" />
           </View>
           <Text className="text-xs mt-1 text-gray-500">Inventory</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          className="items-center"
+          onPress={() => handleNavigation("/reports")}
+        >
+          <View className="bg-gray-100 p-2 rounded-full">
+            <BarChart3 size={20} color="#4b5563" />
+          </View>
+          <Text className="text-xs mt-1 text-gray-500">Reports</Text>
         </TouchableOpacity>
         <TouchableOpacity
           className="items-center"

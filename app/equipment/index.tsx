@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   TextInput,
   FlatList,
   ActivityIndicator,
+  Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
@@ -16,8 +17,11 @@ import {
   Filter,
   Package,
   ChevronRight,
+  ArrowDownUp,
 } from "lucide-react-native";
 import { supabase } from "../../lib/supabase";
+import AddEquipmentForm from "../../components/AddEquipmentForm";
+import EquipmentMovementForm from "../../components/EquipmentMovementForm";
 
 type EquipmentItem = {
   id: string;
@@ -34,6 +38,10 @@ export default function EquipmentInventoryScreen() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedType, setSelectedType] = useState("All");
+  const [showAddEquipmentForm, setShowAddEquipmentForm] = useState(false);
+  const [showMovementForm, setShowMovementForm] = useState(false);
+  const [selectedEquipment, setSelectedEquipment] =
+    useState<EquipmentItem | null>(null);
 
   const equipmentTypes = [
     "All",
@@ -41,9 +49,10 @@ export default function EquipmentInventoryScreen() {
     "Tools",
     "Cleaning Supplies",
     "Electronics",
+    "Other",
   ];
 
-  useEffect(() => {
+  React.useEffect(() => {
     fetchEquipment();
   }, []);
 
@@ -105,13 +114,15 @@ export default function EquipmentInventoryScreen() {
   };
 
   const handleAddEquipment = () => {
-    // Navigate to add equipment screen
-    console.log("Add new equipment");
+    setShowAddEquipmentForm(true);
   };
 
   const handleEquipmentPress = (equipmentId: string) => {
-    // Navigate to equipment detail
-    console.log("View equipment:", equipmentId);
+    const selected = equipment.find((item) => item.id === equipmentId);
+    if (selected) {
+      setSelectedEquipment(selected);
+      setShowMovementForm(true);
+    }
   };
 
   const filteredEquipment = equipment.filter((item) => {
@@ -159,7 +170,10 @@ export default function EquipmentInventoryScreen() {
               {item.stock_level} in stock
             </Text>
           </View>
-          <ChevronRight size={16} color="#9ca3af" className="mt-4" />
+          <View className="flex-row items-center mt-2">
+            <ArrowDownUp size={14} color="#6b7280" />
+            <Text className="text-gray-500 text-xs ml-1">Manage Stock</Text>
+          </View>
         </View>
       </View>
     </TouchableOpacity>
@@ -169,87 +183,120 @@ export default function EquipmentInventoryScreen() {
     <SafeAreaView className="flex-1 bg-white">
       <StatusBar style="auto" />
 
-      {/* Header */}
-      <View className="flex-row justify-between items-center px-4 py-3 border-b border-gray-200">
-        <Text className="text-2xl font-bold text-blue-800">Equipment</Text>
-        <TouchableOpacity
-          className="bg-blue-600 p-2 rounded-full"
-          onPress={handleAddEquipment}
-        >
-          <Plus size={24} color="white" />
-        </TouchableOpacity>
-      </View>
-
-      <View className="flex-1 bg-gray-50">
-        {/* Search and Filter */}
-        <View className="p-4">
-          <View className="flex-row items-center bg-white rounded-lg px-3 py-2 mb-3 border border-gray-200">
-            <Search size={20} color="#6b7280" />
-            <TextInput
-              className="flex-1 ml-2 py-1"
-              placeholder="Search equipment by name or supplier"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-          </View>
-
-          <View className="mb-2">
-            <Text className="text-gray-700 mb-2 font-medium">
-              Filter by type:
+      {showAddEquipmentForm ? (
+        <AddEquipmentForm
+          onCancel={() => setShowAddEquipmentForm(false)}
+          onSuccess={() => {
+            setShowAddEquipmentForm(false);
+            // In a real app, you would refresh the equipment list here
+            fetchEquipment();
+          }}
+        />
+      ) : showMovementForm && selectedEquipment ? (
+        <EquipmentMovementForm
+          equipment={selectedEquipment}
+          onCancel={() => {
+            setShowMovementForm(false);
+            setSelectedEquipment(null);
+          }}
+          onSuccess={() => {
+            setShowMovementForm(false);
+            setSelectedEquipment(null);
+            // In a real app, you would refresh the equipment list here
+            fetchEquipment();
+          }}
+        />
+      ) : (
+        <>
+          {/* Header */}
+          <View className="flex-row justify-between items-center px-4 py-3 border-b border-gray-200">
+            <Text className="text-2xl font-bold text-blue-800">
+              Warehouse Stock
             </Text>
-            <FlatList
-              horizontal
-              data={equipmentTypes}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  className={`px-4 py-2 mr-2 rounded-full ${selectedType === item ? "bg-blue-500" : "bg-white border border-gray-300"}`}
-                  onPress={() => setSelectedType(item)}
-                >
-                  <Text
-                    className={
-                      selectedType === item ? "text-white" : "text-gray-700"
-                    }
-                  >
-                    {item}
-                  </Text>
-                </TouchableOpacity>
-              )}
-              keyExtractor={(item) => item}
-              showsHorizontalScrollIndicator={false}
-            />
+            <TouchableOpacity
+              className="bg-blue-600 p-2 rounded-full"
+              onPress={handleAddEquipment}
+            >
+              <Plus size={24} color="white" />
+            </TouchableOpacity>
           </View>
-        </View>
 
-        {/* Equipment list */}
-        <View className="flex-1 px-4">
-          {loading ? (
-            <View className="flex-1 justify-center items-center">
-              <ActivityIndicator size="large" color="#1e40af" />
-              <Text className="mt-2 text-gray-600">Loading equipment...</Text>
+          <View className="flex-1 bg-gray-50">
+            {/* Search and Filter */}
+            <View className="p-4">
+              <View className="flex-row items-center bg-white rounded-lg px-3 py-2 mb-3 border border-gray-200">
+                <Search size={20} color="#6b7280" />
+                <TextInput
+                  className="flex-1 ml-2 py-1"
+                  placeholder="Search stock items by name or supplier"
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                />
+              </View>
+
+              <View className="mb-2">
+                <Text className="text-gray-700 mb-2 font-medium">
+                  Filter by type:
+                </Text>
+                <FlatList
+                  horizontal
+                  data={equipmentTypes}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      className={`px-4 py-2 mr-2 rounded-full ${selectedType === item ? "bg-blue-500" : "bg-white border border-gray-300"}`}
+                      onPress={() => setSelectedType(item)}
+                    >
+                      <Text
+                        className={
+                          selectedType === item ? "text-white" : "text-gray-700"
+                        }
+                      >
+                        {item}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                  keyExtractor={(item) => item}
+                  showsHorizontalScrollIndicator={false}
+                />
+              </View>
             </View>
-          ) : filteredEquipment.length > 0 ? (
-            <FlatList
-              data={filteredEquipment}
-              renderItem={renderEquipmentItem}
-              keyExtractor={(item) => item.id}
-              showsVerticalScrollIndicator={false}
-            />
-          ) : (
-            <View className="flex-1 justify-center items-center">
-              <Package size={48} color="#9ca3af" />
-              <Text className="mt-4 text-gray-500 text-center">
-                No equipment found
-              </Text>
-              <TouchableOpacity
-                className="mt-4 bg-blue-600 px-4 py-2 rounded-lg"
-                onPress={handleAddEquipment}
-              >
-                <Text className="text-white font-medium">Add Equipment</Text>
-              </TouchableOpacity>
+
+            {/* Equipment list */}
+            <View className="flex-1 px-4">
+              {loading ? (
+                <View className="flex-1 justify-center items-center">
+                  <ActivityIndicator size="large" color="#1e40af" />
+                  <Text className="mt-2 text-gray-600">
+                    Loading stock items...
+                  </Text>
+                </View>
+              ) : filteredEquipment.length > 0 ? (
+                <FlatList
+                  data={filteredEquipment}
+                  renderItem={renderEquipmentItem}
+                  keyExtractor={(item) => item.id}
+                  showsVerticalScrollIndicator={false}
+                />
+              ) : (
+                <View className="flex-1 justify-center items-center">
+                  <Package size={48} color="#9ca3af" />
+                  <Text className="mt-4 text-gray-500 text-center">
+                    No stock items found
+                  </Text>
+                  <TouchableOpacity
+                    className="mt-4 bg-blue-600 px-4 py-2 rounded-lg"
+                    onPress={handleAddEquipment}
+                  >
+                    <Text className="text-white font-medium">
+                      Add Stock Item
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
-          )}
-        </View>
-      </View>
+          </View>
+        </>
+      )}
     </SafeAreaView>
   );
 }

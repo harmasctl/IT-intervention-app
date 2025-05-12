@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   FlatList,
   ScrollView,
+  Alert,
 } from "react-native";
 import {
   Camera,
@@ -41,6 +42,8 @@ interface DeviceInventoryProps {
   onAddDevice?: () => void;
   onScanSerial?: () => void;
   onSelectDevice?: (device: Device) => void;
+  onScheduleMaintenance?: (device: Device) => void;
+  onUpdateStatus?: (device: Device) => void;
 }
 
 const DeviceInventory = ({
@@ -96,6 +99,9 @@ const DeviceInventory = ({
   onAddDevice = () => console.log("Add device"),
   onScanSerial = () => console.log("Scan serial"),
   onSelectDevice = (device) => console.log("Selected device:", device),
+  onScheduleMaintenance = (device) =>
+    console.log("Schedule maintenance:", device),
+  onUpdateStatus = (device) => console.log("Update status:", device),
 }: DeviceInventoryProps) => {
   // In a real implementation, we would fetch from Supabase here
   // useEffect(() => {
@@ -355,12 +361,28 @@ const DeviceInventory = ({
           </View>
 
           <View className="flex-row justify-between mb-10">
-            <TouchableOpacity className="bg-blue-500 py-3 px-4 rounded-lg flex-1 mr-2">
+            <TouchableOpacity
+              className="bg-blue-500 py-3 px-4 rounded-lg flex-1 mr-2"
+              onPress={() => {
+                // Call the onScheduleMaintenance prop with the selected device
+                if (onScheduleMaintenance) {
+                  onScheduleMaintenance(selectedDevice);
+                }
+              }}
+            >
               <Text className="text-white text-center font-medium">
                 Schedule Maintenance
               </Text>
             </TouchableOpacity>
-            <TouchableOpacity className="bg-gray-200 py-3 px-4 rounded-lg flex-1 ml-2">
+            <TouchableOpacity
+              className="bg-gray-200 py-3 px-4 rounded-lg flex-1 ml-2"
+              onPress={() => {
+                // Call the onUpdateStatus prop with the selected device
+                if (onUpdateStatus) {
+                  onUpdateStatus(selectedDevice);
+                }
+              }}
+            >
               <Text className="text-gray-700 text-center font-medium">
                 Update Status
               </Text>

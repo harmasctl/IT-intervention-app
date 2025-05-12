@@ -40,6 +40,7 @@ interface TicketData {
   restaurant: RestaurantOption | null;
   priority: "low" | "medium" | "high";
   photos: string[];
+  jiraTicketId: string;
 }
 
 const MOCK_DEVICES: DeviceOption[] = [
@@ -66,6 +67,7 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
     restaurant: null,
     priority: "medium",
     photos: [],
+    jiraTicketId: "",
   });
 
   const [deviceSearchQuery, setDeviceSearchQuery] = useState("");
@@ -133,7 +135,7 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
 
   const renderStepIndicator = () => (
     <View className="flex-row justify-between mb-6 px-4">
-      {[0, 1, 2, 3, 4].map((step) => (
+      {[0, 1, 2, 3, 4, 5].map((step) => (
         <View
           key={step}
           className={`h-2 flex-1 mx-1 rounded-full ${currentStep >= step ? "bg-blue-500" : "bg-gray-300"}`}
@@ -158,7 +160,7 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
               onChangeText={(text) => updateTicketData("title", text)}
             />
             <TouchableOpacity
-              className={`py-3 px-4 rounded-lg ${ticketData.title.trim() ? "bg-blue-500" : "bg-gray-300"}`}
+              className={`py-3 px-4 rounded-lg ${ticketData.title.trim() ? "bg-blue-500" : "bg-gray-300"} ${ticketData.title.trim() ? "animate-pulse" : ""}`}
               onPress={handleNext}
               disabled={!ticketData.title.trim()}
             >
@@ -186,7 +188,7 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
               {filteredDevices.map((device) => (
                 <TouchableOpacity
                   key={device.id}
-                  className={`p-3 border-b border-gray-200 flex-row justify-between items-center ${ticketData.device?.id === device.id ? "bg-blue-50" : ""}`}
+                  className={`p-3 border-b border-gray-200 flex-row justify-between items-center ${ticketData.device?.id === device.id ? "bg-blue-50" : ""} animate-fade-in`}
                   onPress={() => updateTicketData("device", device)}
                 >
                   <View>
@@ -287,7 +289,7 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
               {filteredRestaurants.map((restaurant) => (
                 <TouchableOpacity
                   key={restaurant.id}
-                  className={`p-3 border-b border-gray-200 flex-row justify-between items-center ${ticketData.restaurant?.id === restaurant.id ? "bg-blue-50" : ""}`}
+                  className={`p-3 border-b border-gray-200 flex-row justify-between items-center ${ticketData.restaurant?.id === restaurant.id ? "bg-blue-50" : ""} animate-fade-in`}
                   onPress={() => updateTicketData("restaurant", restaurant)}
                 >
                   <View>
@@ -331,6 +333,42 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
         );
 
       case 4:
+        return (
+          <View className="px-4">
+            <Text className="text-lg font-bold mb-2">Jira Integration</Text>
+            <Text className="text-gray-600 mb-4">
+              Link this ticket to an existing Jira ticket (optional)
+            </Text>
+
+            <TextInput
+              className="border border-gray-300 rounded-lg p-3 mb-4 bg-white"
+              placeholder="e.g., TECH-123"
+              value={ticketData.jiraTicketId}
+              onChangeText={(text) => updateTicketData("jiraTicketId", text)}
+            />
+
+            <View className="flex-row justify-between">
+              <TouchableOpacity
+                className="py-3 px-4 rounded-lg bg-gray-200 w-[48%]"
+                onPress={handleBack}
+              >
+                <Text className="text-gray-800 text-center font-semibold">
+                  Back
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                className="py-3 px-4 rounded-lg bg-blue-500 w-[48%]"
+                onPress={handleNext}
+              >
+                <Text className="text-white text-center font-semibold">
+                  Next
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        );
+
+      case 5:
         return (
           <View className="px-4">
             <Text className="text-lg font-bold mb-2">Priority & Photos</Text>
@@ -380,7 +418,7 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
                 </View>
               ))}
               <TouchableOpacity className="w-1/3 p-1" onPress={addMockPhoto}>
-                <View className="w-full h-24 border-2 border-dashed border-gray-300 rounded-lg items-center justify-center bg-gray-50">
+                <View className="w-full h-24 border-2 border-dashed border-gray-300 rounded-lg items-center justify-center bg-gray-50 animate-pulse">
                   <Camera size={24} color="#9ca3af" />
                   <Text className="text-gray-400 mt-1">Add Photo</Text>
                 </View>
@@ -397,7 +435,7 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                className="py-3 px-4 rounded-lg bg-blue-500 w-[48%]"
+                className="py-3 px-4 rounded-lg bg-blue-500 w-[48%] animate-pulse"
                 onPress={handleSubmit}
               >
                 <Text className="text-white text-center font-semibold">
@@ -415,7 +453,7 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
 
   return (
     <ScrollView className="flex-1 bg-white">
-      <View className="pt-4 pb-8">
+      <View className="pt-4 pb-8 animate-fade-in">
         {renderStepIndicator()}
         {renderStepContent()}
       </View>

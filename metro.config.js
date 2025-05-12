@@ -10,4 +10,6 @@ config.cacheStores = [];
 config.resetCache = true;
 config.transformer.enableBabelRCLookup = false;
 
-module.exports = withNativeWind(config, { input: "./global.css" });
+module.exports = withNativeWind(config, {
+  input: "./global.css",
+});

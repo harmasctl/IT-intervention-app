@@ -42,11 +42,18 @@ function RootLayoutNav() {
       <Stack.Screen name="tickets/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="tickets/create" options={{ headerShown: false }} />
       <Stack.Screen name="inventory/index" options={{ headerShown: false }} />
+      <Stack.Screen name="devices/index" options={{ headerShown: false }} />
       <Stack.Screen name="profile/index" options={{ headerShown: false }} />
       <Stack.Screen name="auth/login" options={{ headerShown: false }} />
       <Stack.Screen name="auth/signup" options={{ headerShown: false }} />
       <Stack.Screen name="schedule/index" options={{ headerShown: false }} />
       <Stack.Screen name="equipment/index" options={{ headerShown: false }} />
+      <Stack.Screen name="equipment/history" options={{ headerShown: false }} />
+      <Stack.Screen
+        name="equipment/suppliers"
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen name="reports/index" options={{ headerShown: false }} />
     </Stack>
   );
 }
