@@ -38,9 +38,11 @@ interface TicketDetailProps {
   status?: "new" | "assigned" | "in-progress" | "resolved";
   assignedTo?: string;
   createdAt?: string;
+  createdBy?: string;
   photos?: string[];
   interventionHistory?: InterventionHistory[];
-  onAssign?: () => void;
+  technicians?: string[];
+  onAssign?: (technicianId: string) => void;
   onSchedule?: () => void;
   onUpdateStatus?: (status: string) => void;
   onAddResolution?: (resolution: string) => void;
@@ -56,6 +58,9 @@ const TicketDetail: React.FC<TicketDetailProps> = ({
   status = "assigned",
   assignedTo = "John Doe",
   createdAt = "2023-10-15 09:30 AM",
+  createdBy = "Sarah Johnson",
+  technicians = ["John Doe", "Jane Smith", "Mike Wilson", "Lisa Brown"],
+
   photos = [
     "https://images.unsplash.com/photo-1585704032915-c3400ca199e7?w=400&q=80",
     "https://images.unsplash.com/photo-1563203369-26f2e4a5ccf7?w=400&q=80",
@@ -77,6 +82,7 @@ const TicketDetail: React.FC<TicketDetailProps> = ({
   const [showHistory, setShowHistory] = useState(true);
   const [resolutionNote, setResolutionNote] = useState("");
   const [showStatusOptions, setShowStatusOptions] = useState(false);
+  const [showAssignOptions, setShowAssignOptions] = useState(false);
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -153,6 +159,11 @@ const TicketDetail: React.FC<TicketDetailProps> = ({
           </View>
 
           <View className="mb-4">
+            <Text className="text-sm text-gray-500 mb-1">Created By</Text>
+            <Text className="text-base font-medium">{createdBy}</Text>
+          </View>
+
+          <View className="mb-4">
             <Text className="text-sm text-gray-500 mb-1">Device</Text>
             <Text className="text-base font-medium">{device}</Text>
           </View>
@@ -198,18 +209,57 @@ const TicketDetail: React.FC<TicketDetailProps> = ({
         )}
 
         {/* Action buttons */}
-        <View className="flex-row justify-between mb-6">
+        <View className="mb-6">
+          <Text className="text-lg font-bold mb-3">Assign Ticket</Text>
           <TouchableOpacity
-            className="bg-blue-500 px-4 py-3 rounded-lg flex-1 mr-2 items-center"
-            onPress={onAssign}
+            className="bg-gray-100 p-4 rounded-lg flex-row justify-between items-center"
+            onPress={() => setShowAssignOptions(!showAssignOptions)}
           >
-            <Text className="text-white font-medium">Assign</Text>
+            <Text className="font-medium">
+              {assignedTo || "Select Technician"}
+            </Text>
+            {showAssignOptions ? (
+              <ChevronUp size={20} />
+            ) : (
+              <ChevronDown size={20} />
+            )}
           </TouchableOpacity>
+
+          {showAssignOptions && (
+            <View className="bg-white border border-gray-200 rounded-lg mt-2 mb-4">
+              {technicians.map((tech) => (
+                <TouchableOpacity
+                  key={tech}
+                  className={`p-3 border-b border-gray-100 ${tech === assignedTo ? "bg-gray-50" : ""}`}
+                  onPress={() => {
+                    onAssign(tech);
+                    setShowAssignOptions(false);
+                  }}
+                >
+                  <Text>{tech}</Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity
+                className="p-3 border-b border-gray-100 bg-blue-50"
+                onPress={() => {
+                  onAssign(createdBy);
+                  setShowAssignOptions(false);
+                }}
+              >
+                <Text className="text-blue-600">
+                  Assign to Creator ({createdBy})
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           <TouchableOpacity
-            className="bg-purple-500 px-4 py-3 rounded-lg flex-1 ml-2 items-center"
+            className="bg-purple-500 px-4 py-3 rounded-lg items-center mt-3"
             onPress={onSchedule}
           >
-            <Text className="text-white font-medium">Schedule</Text>
+            <Text className="text-white font-medium">
+              Schedule Intervention
+            </Text>
           </TouchableOpacity>
         </View>
 

@@ -1,5 +1,5 @@
 import React from "react";
-import { View, TouchableOpacity } from "react-native";
+import { View, TouchableOpacity, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { useRouter, useLocalSearchParams } from "expo-router";
@@ -10,9 +10,10 @@ export default function TicketDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
 
-  const handleAssign = () => {
+  const handleAssign = (technicianId: string) => {
     // Implement assign functionality
-    console.log("Assign ticket", id);
+    console.log("Assign ticket", id, "to technician", technicianId);
+    Alert.alert("Success", `Ticket assigned to ${technicianId}`);
   };
 
   const handleSchedule = () => {

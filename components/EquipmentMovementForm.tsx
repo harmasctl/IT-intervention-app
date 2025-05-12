@@ -7,7 +7,7 @@ import {
   ScrollView,
   Alert,
 } from "react-native";
-import { X, ArrowDownUp } from "lucide-react-native";
+import { X, ArrowDownUp, Camera } from "lucide-react-native";
 import { supabase } from "../lib/supabase";
 
 interface EquipmentItem {
@@ -34,6 +34,17 @@ const EquipmentMovementForm = ({
   const [destination, setDestination] = useState("");
   const [notes, setNotes] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleScanBarcode = () => {
+    // In a real app, this would open the barcode scanner
+    Alert.alert("Barcode Scanner", "Scanning barcode for stock item...");
+
+    // Mock successful scan
+    setTimeout(() => {
+      const mockBarcode = `STOCK-${Math.floor(Math.random() * 10000)}`;
+      Alert.alert("Barcode Scanned", `Stock item ${mockBarcode} detected`);
+    }, 1000);
+  };
 
   const handleSubmit = async () => {
     if (!quantity || isNaN(Number(quantity)) || Number(quantity) <= 0) {
@@ -152,13 +163,21 @@ const EquipmentMovementForm = ({
 
         <View className="mb-4">
           <Text className="text-gray-700 mb-1 font-medium">Quantity *</Text>
-          <TextInput
-            className="border border-gray-300 rounded-lg px-3 py-2"
-            placeholder="Enter quantity"
-            value={quantity}
-            onChangeText={setQuantity}
-            keyboardType="numeric"
-          />
+          <View className="flex-row">
+            <TextInput
+              className="border border-gray-300 rounded-lg px-3 py-2 flex-1 mr-2"
+              placeholder="Enter quantity"
+              value={quantity}
+              onChangeText={setQuantity}
+              keyboardType="numeric"
+            />
+            <TouchableOpacity
+              className="bg-green-500 p-3 rounded-lg"
+              onPress={handleScanBarcode}
+            >
+              <Camera size={20} color="white" />
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View className="mb-4">

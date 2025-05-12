@@ -44,6 +44,7 @@ interface DeviceInventoryProps {
   onSelectDevice?: (device: Device) => void;
   onScheduleMaintenance?: (device: Device) => void;
   onUpdateStatus?: (device: Device) => void;
+  onMoveDevice?: (device: Device) => void;
 }
 
 const DeviceInventory = ({
@@ -102,6 +103,7 @@ const DeviceInventory = ({
   onScheduleMaintenance = (device) =>
     console.log("Schedule maintenance:", device),
   onUpdateStatus = (device) => console.log("Update status:", device),
+  onMoveDevice = (device) => console.log("Move device:", device),
 }: DeviceInventoryProps) => {
   // In a real implementation, we would fetch from Supabase here
   // useEffect(() => {
@@ -360,31 +362,46 @@ const DeviceInventory = ({
             ))}
           </View>
 
-          <View className="flex-row justify-between mb-10">
+          <View className="mb-10">
+            <View className="flex-row justify-between mb-3">
+              <TouchableOpacity
+                className="bg-blue-500 py-3 px-4 rounded-xl flex-1 mr-2"
+                onPress={() => {
+                  // Call the onScheduleMaintenance prop with the selected device
+                  if (onScheduleMaintenance) {
+                    onScheduleMaintenance(selectedDevice);
+                  }
+                }}
+              >
+                <Text className="text-white text-center font-medium">
+                  Schedule Maintenance
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                className="bg-purple-500 py-3 px-4 rounded-xl flex-1 ml-2"
+                onPress={() => {
+                  // Call the onUpdateStatus prop with the selected device
+                  if (onUpdateStatus) {
+                    onUpdateStatus(selectedDevice);
+                  }
+                }}
+              >
+                <Text className="text-white text-center font-medium">
+                  Update Status
+                </Text>
+              </TouchableOpacity>
+            </View>
             <TouchableOpacity
-              className="bg-blue-500 py-3 px-4 rounded-lg flex-1 mr-2"
+              className="bg-green-500 py-3 px-4 rounded-xl flex-1"
               onPress={() => {
-                // Call the onScheduleMaintenance prop with the selected device
-                if (onScheduleMaintenance) {
-                  onScheduleMaintenance(selectedDevice);
+                // Call the onMoveDevice prop with the selected device
+                if (onMoveDevice) {
+                  onMoveDevice(selectedDevice);
                 }
               }}
             >
               <Text className="text-white text-center font-medium">
-                Schedule Maintenance
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              className="bg-gray-200 py-3 px-4 rounded-lg flex-1 ml-2"
-              onPress={() => {
-                // Call the onUpdateStatus prop with the selected device
-                if (onUpdateStatus) {
-                  onUpdateStatus(selectedDevice);
-                }
-              }}
-            >
-              <Text className="text-gray-700 text-center font-medium">
-                Update Status
+                Move to Another Restaurant
               </Text>
             </TouchableOpacity>
           </View>

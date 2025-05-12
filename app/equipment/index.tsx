@@ -7,6 +7,8 @@ import {
   FlatList,
   ActivityIndicator,
   Modal,
+  Alert,
+  BlurView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
@@ -18,10 +20,12 @@ import {
   Package,
   ChevronRight,
   ArrowDownUp,
+  Camera,
 } from "lucide-react-native";
 import { supabase } from "../../lib/supabase";
 import AddEquipmentForm from "../../components/AddEquipmentForm";
 import EquipmentMovementForm from "../../components/EquipmentMovementForm";
+import BarcodeScanner from "../../components/BarcodeScanner";
 
 type EquipmentItem = {
   id: string;
@@ -40,6 +44,8 @@ export default function EquipmentInventoryScreen() {
   const [selectedType, setSelectedType] = useState("All");
   const [showAddEquipmentForm, setShowAddEquipmentForm] = useState(false);
   const [showMovementForm, setShowMovementForm] = useState(false);
+  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
+  const [scanMode, setScanMode] = useState<"equipment" | "stock">("equipment");
   const [selectedEquipment, setSelectedEquipment] =
     useState<EquipmentItem | null>(null);
 
@@ -115,6 +121,49 @@ export default function EquipmentInventoryScreen() {
 
   const handleAddEquipment = () => {
     setShowAddEquipmentForm(true);
+  };
+
+  const handleScanBarcode = (mode: "equipment" | "stock") => {
+    setScanMode(mode);
+    setShowBarcodeScanner(true);
+  };
+
+  const handleBarcodeScan = (data: string) => {
+    setShowBarcodeScanner(false);
+
+    if (scanMode === "equipment") {
+      // Find equipment by barcode
+      const found = equipment.find((item) => item.id === data);
+      if (found) {
+        setSelectedEquipment(found);
+        setShowMovementForm(true);
+      } else {
+        Alert.alert(
+          "Equipment Not Found",
+          "No equipment found with this barcode. Would you like to add it?",
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Add New", onPress: handleAddEquipment },
+          ],
+        );
+      }
+    } else {
+      // Stock scanning logic
+      Alert.alert(
+        "Stock Item Scanned",
+        `Stock item with ID ${data} scanned. Update inventory?`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Update",
+            onPress: () => {
+              // In a real app, this would open a form to update the stock
+              Alert.alert("Success", "Stock updated successfully");
+            },
+          },
+        ],
+      );
+    }
   };
 
   const handleEquipmentPress = (equipmentId: string) => {
@@ -213,12 +262,20 @@ export default function EquipmentInventoryScreen() {
             <Text className="text-2xl font-bold text-blue-800">
               Warehouse Stock
             </Text>
-            <TouchableOpacity
-              className="bg-blue-600 p-2 rounded-full"
-              onPress={handleAddEquipment}
-            >
-              <Plus size={24} color="white" />
-            </TouchableOpacity>
+            <View className="flex-row">
+              <TouchableOpacity
+                className="bg-green-600 p-2 rounded-full mr-2"
+                onPress={() => handleScanBarcode("equipment")}
+              >
+                <Camera size={24} color="white" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                className="bg-blue-600 p-2 rounded-full"
+                onPress={handleAddEquipment}
+              >
+                <Plus size={24} color="white" />
+              </TouchableOpacity>
+            </View>
           </View>
 
           <View className="flex-1 bg-gray-50">
@@ -297,6 +354,22 @@ export default function EquipmentInventoryScreen() {
           </View>
         </>
       )}
+
+      {/* Barcode Scanner Modal */}
+      <Modal
+        visible={showBarcodeScanner}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setShowBarcodeScanner(false)}
+      >
+        <BlurView intensity={90} tint="dark" style={{ flex: 1 }}>
+          <BarcodeScanner
+            onScan={handleBarcodeScan}
+            onClose={() => setShowBarcodeScanner(false)}
+            mode={scanMode}
+          />
+        </BlurView>
+      </Modal>
     </SafeAreaView>
   );
 }

@@ -11,11 +11,21 @@ import { Camera, X } from "lucide-react-native";
 import { Image } from "expo-image";
 import { supabase } from "../lib/supabase";
 
+interface CustomField {
+  id: string;
+  name: string;
+  type: "text" | "number" | "date" | "select";
+  options?: string[];
+  required?: boolean;
+  value?: string | number | null;
+}
+
 interface AddDeviceFormProps {
   onCancel: () => void;
   onSuccess: () => void;
   restaurants?: string[];
   initialSerialNumber?: string;
+  customFields?: CustomField[];
 }
 
 const AddDeviceForm = ({
@@ -28,6 +38,30 @@ const AddDeviceForm = ({
     "Pizza Palace",
   ],
   initialSerialNumber = "",
+  customFields = [
+    {
+      id: "warranty",
+      name: "Warranty Expiration",
+      type: "date",
+      required: false,
+      value: null,
+    },
+    {
+      id: "model",
+      name: "Model Number",
+      type: "text",
+      required: false,
+      value: "",
+    },
+    {
+      id: "category",
+      name: "Device Category",
+      type: "select",
+      options: ["POS", "Kitchen Display", "Printer", "Network", "Other"],
+      required: false,
+      value: "",
+    },
+  ],
 }: AddDeviceFormProps) => {
   const [name, setName] = useState("");
   const [serialNumber, setSerialNumber] = useState(initialSerialNumber);
@@ -35,6 +69,7 @@ const AddDeviceForm = ({
   const [notes, setNotes] = useState("");
   const [image, setImage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [fields, setFields] = useState(customFields);
 
   const handleScanSerial = () => {
     // In a real app, this would open the camera to scan a barcode/QR code
@@ -61,6 +96,18 @@ const AddDeviceForm = ({
       return;
     }
 
+    // Validate required custom fields
+    const missingRequiredFields = fields.filter(
+      (field) => field.required && !field.value,
+    );
+    if (missingRequiredFields.length > 0) {
+      Alert.alert(
+        "Error",
+        `Please fill in required field: ${missingRequiredFields[0].name}`,
+      );
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -73,6 +120,10 @@ const AddDeviceForm = ({
       //   image,
       //   status: 'operational',
       //   last_maintenance: new Date().toISOString().split('T')[0],
+      //   custom_fields: fields.reduce((acc, field) => {
+      //     acc[field.id] = field.value;
+      //     return acc;
+      //   }, {}),
       // });
 
       // if (error) throw error;
@@ -162,6 +213,67 @@ const AddDeviceForm = ({
             onChangeText={setNotes}
           />
         </View>
+
+        {/* Custom Fields */}
+        {fields.map((field, index) => (
+          <View key={field.id} className="mb-4">
+            <Text className="text-gray-700 mb-1 font-medium">
+              {field.name}{" "}
+              {field.required && <Text className="text-red-500">*</Text>}
+            </Text>
+
+            {field.type === "text" && (
+              <TextInput
+                className="border border-gray-300 rounded-lg px-3 py-2"
+                placeholder={`Enter ${field.name.toLowerCase()}`}
+                value={(field.value as string) || ""}
+                onChangeText={(text) => {
+                  const updatedFields = [...fields];
+                  updatedFields[index].value = text;
+                  setFields(updatedFields);
+                }}
+              />
+            )}
+
+            {field.type === "number" && (
+              <TextInput
+                className="border border-gray-300 rounded-lg px-3 py-2"
+                placeholder={`Enter ${field.name.toLowerCase()}`}
+                value={field.value?.toString() || ""}
+                onChangeText={(text) => {
+                  const updatedFields = [...fields];
+                  updatedFields[index].value = text ? Number(text) : null;
+                  setFields(updatedFields);
+                }}
+                keyboardType="numeric"
+              />
+            )}
+
+            {field.type === "select" && field.options && (
+              <View className="border border-gray-300 rounded-lg overflow-hidden">
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  {field.options.map((option) => (
+                    <TouchableOpacity
+                      key={option}
+                      className={`px-4 py-3 ${field.value === option ? "bg-blue-500" : "bg-white"}`}
+                      onPress={() => {
+                        const updatedFields = [...fields];
+                        updatedFields[index].value = option;
+                        setFields(updatedFields);
+                      }}
+                    >
+                      <Text
+                        className={`${field.value === option ? "text-white" : "text-gray-700"}`}
+                      >
+                        {option}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+          </View>
+        ))}
 
         <View className="mb-6">
           <Text className="text-gray-700 mb-1 font-medium">Device Image</Text>

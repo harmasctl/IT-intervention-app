@@ -94,6 +94,7 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
     //   device_id: ticketData.device?.id,
     //   diagnostic_info: ticketData.diagnosticInfo,
     //   photos: ticketData.photos,
+    //   jira_ticket_id: ticketData.jiraTicketId,
     // }]);
 
     if (onSubmit) {
@@ -138,7 +139,7 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
       {[0, 1, 2, 3, 4, 5].map((step) => (
         <View
           key={step}
-          className={`h-2 flex-1 mx-1 rounded-full ${currentStep >= step ? "bg-blue-500" : "bg-gray-300"}`}
+          className={`h-2 flex-1 mx-1 rounded-full ${currentStep >= step ? "bg-blue-500" : "bg-gray-300"} transition-all duration-300 ease-in-out`}
         />
       ))}
     </View>
@@ -148,7 +149,7 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
     switch (currentStep) {
       case 0:
         return (
-          <View className="px-4">
+          <View className="px-4 animate-fade-in">
             <Text className="text-lg font-bold mb-2">Ticket Title</Text>
             <Text className="text-gray-600 mb-4">
               Enter a clear, descriptive title for this support ticket
@@ -171,7 +172,7 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
 
       case 1:
         return (
-          <View className="px-4">
+          <View className="px-4 animate-slide-in-right">
             <Text className="text-lg font-bold mb-2">Select Device</Text>
             <Text className="text-gray-600 mb-4">
               Choose the device that is experiencing issues
@@ -196,7 +197,11 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
                     <Text className="text-gray-500 text-sm">{device.type}</Text>
                   </View>
                   {ticketData.device?.id === device.id && (
-                    <Check size={20} color="#3b82f6" />
+                    <Check
+                      size={20}
+                      color="#3b82f6"
+                      className="animate-bounce"
+                    />
                   )}
                 </TouchableOpacity>
               ))}
@@ -209,7 +214,7 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
 
             <View className="flex-row justify-between">
               <TouchableOpacity
-                className="py-3 px-4 rounded-lg bg-gray-200 w-[48%]"
+                className="py-3 px-4 rounded-lg bg-gray-200 w-[48%] animate-fade-in"
                 onPress={handleBack}
               >
                 <Text className="text-gray-800 text-center font-semibold">
@@ -217,7 +222,7 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                className={`py-3 px-4 rounded-lg w-[48%] ${ticketData.device ? "bg-blue-500" : "bg-gray-300"}`}
+                className={`py-3 px-4 rounded-lg w-[48%] ${ticketData.device ? "bg-blue-500" : "bg-gray-300"} animate-fade-in`}
                 onPress={handleNext}
                 disabled={!ticketData.device}
               >
@@ -231,7 +236,7 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
 
       case 2:
         return (
-          <View className="px-4">
+          <View className="px-4 animate-slide-in-right">
             <Text className="text-lg font-bold mb-2">
               Diagnostic Information
             </Text>
@@ -250,7 +255,7 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
 
             <View className="flex-row justify-between">
               <TouchableOpacity
-                className="py-3 px-4 rounded-lg bg-gray-200 w-[48%]"
+                className="py-3 px-4 rounded-lg bg-gray-200 w-[48%] animate-fade-in"
                 onPress={handleBack}
               >
                 <Text className="text-gray-800 text-center font-semibold">
@@ -258,7 +263,7 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                className={`py-3 px-4 rounded-lg w-[48%] ${ticketData.diagnosticInfo.trim() ? "bg-blue-500" : "bg-gray-300"}`}
+                className={`py-3 px-4 rounded-lg w-[48%] ${ticketData.diagnosticInfo.trim() ? "bg-blue-500" : "bg-gray-300"} animate-fade-in`}
                 onPress={handleNext}
                 disabled={!ticketData.diagnosticInfo.trim()}
               >
@@ -272,7 +277,7 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
 
       case 3:
         return (
-          <View className="px-4">
+          <View className="px-4 animate-slide-in-right">
             <Text className="text-lg font-bold mb-2">Restaurant Location</Text>
             <Text className="text-gray-600 mb-4">
               Select the restaurant where the issue is occurring
@@ -299,7 +304,11 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
                     </Text>
                   </View>
                   {ticketData.restaurant?.id === restaurant.id && (
-                    <Check size={20} color="#3b82f6" />
+                    <Check
+                      size={20}
+                      color="#3b82f6"
+                      className="animate-bounce"
+                    />
                   )}
                 </TouchableOpacity>
               ))}
@@ -312,7 +321,7 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
 
             <View className="flex-row justify-between">
               <TouchableOpacity
-                className="py-3 px-4 rounded-lg bg-gray-200 w-[48%]"
+                className="py-3 px-4 rounded-lg bg-gray-200 w-[48%] animate-fade-in"
                 onPress={handleBack}
               >
                 <Text className="text-gray-800 text-center font-semibold">
@@ -320,7 +329,7 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                className={`py-3 px-4 rounded-lg w-[48%] ${ticketData.restaurant ? "bg-blue-500" : "bg-gray-300"}`}
+                className={`py-3 px-4 rounded-lg w-[48%] ${ticketData.restaurant ? "bg-blue-500" : "bg-gray-300"} animate-fade-in`}
                 onPress={handleNext}
                 disabled={!ticketData.restaurant}
               >
@@ -334,7 +343,7 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
 
       case 4:
         return (
-          <View className="px-4">
+          <View className="px-4 animate-slide-in-right">
             <Text className="text-lg font-bold mb-2">Jira Integration</Text>
             <Text className="text-gray-600 mb-4">
               Link this ticket to an existing Jira ticket (optional)
@@ -349,7 +358,7 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
 
             <View className="flex-row justify-between">
               <TouchableOpacity
-                className="py-3 px-4 rounded-lg bg-gray-200 w-[48%]"
+                className="py-3 px-4 rounded-lg bg-gray-200 w-[48%] animate-fade-in"
                 onPress={handleBack}
               >
                 <Text className="text-gray-800 text-center font-semibold">
@@ -357,7 +366,7 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                className="py-3 px-4 rounded-lg bg-blue-500 w-[48%]"
+                className="py-3 px-4 rounded-lg bg-blue-500 w-[48%] animate-fade-in"
                 onPress={handleNext}
               >
                 <Text className="text-white text-center font-semibold">
@@ -370,7 +379,7 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
 
       case 5:
         return (
-          <View className="px-4">
+          <View className="px-4 animate-slide-in-right">
             <Text className="text-lg font-bold mb-2">Priority & Photos</Text>
             <Text className="text-gray-600 mb-4">
               Set priority level and attach relevant photos
@@ -389,7 +398,7 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
                           ? "bg-yellow-500"
                           : "bg-red-500"
                       : "bg-gray-200"
-                  }`}
+                  } transition-colors duration-300 ease-in-out`}
                   onPress={() => updateTicketData("priority", priority)}
                 >
                   <Text
@@ -404,7 +413,10 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
             <Text className="font-semibold mb-2">Photos</Text>
             <View className="flex-row flex-wrap mb-4">
               {ticketData.photos.map((photo, index) => (
-                <View key={index} className="w-1/3 p-1 relative">
+                <View
+                  key={index}
+                  className="w-1/3 p-1 relative animate-fade-in"
+                >
                   <Image
                     source={{ uri: photo }}
                     className="w-full h-24 rounded-lg"
@@ -427,7 +439,7 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
 
             <View className="flex-row justify-between">
               <TouchableOpacity
-                className="py-3 px-4 rounded-lg bg-gray-200 w-[48%]"
+                className="py-3 px-4 rounded-lg bg-gray-200 w-[48%] animate-fade-in"
                 onPress={handleBack}
               >
                 <Text className="text-gray-800 text-center font-semibold">
