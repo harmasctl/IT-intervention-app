@@ -66,11 +66,26 @@ export default function ReportsScreen() {
 
   useEffect(() => {
     // Simulate loading data
-    const timer = setTimeout(() => {
-      setLoading(false);
-    }, 1500);
+    setLoading(true);
 
-    return () => clearTimeout(timer);
+    const fetchReportData = async () => {
+      try {
+        // In a real app, we would fetch data from Supabase based on reportType and timeRange
+        // const { data, error } = await supabase.from(`${reportType}_reports`).select('*').eq('time_range', timeRange);
+        // if (error) throw error;
+        // Process the data...
+
+        // For now, just simulate a delay
+        setTimeout(() => {
+          setLoading(false);
+        }, 1500);
+      } catch (error) {
+        console.error("Error fetching report data:", error);
+        setLoading(false);
+      }
+    };
+
+    fetchReportData();
   }, [reportType, timeRange]);
 
   const renderTimeRangeSelector = () => (

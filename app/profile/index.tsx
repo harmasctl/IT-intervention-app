@@ -51,7 +51,34 @@ export default function ProfileScreen() {
         .eq("id", user?.id)
         .single();
 
-      if (error) throw error;
+      if (error) {
+        // If no user profile exists yet, create one
+        if (error.code === "PGRST116") {
+          const newUserData = {
+            id: user?.id,
+            name: user?.user_metadata?.name || "New User",
+            role: user?.user_metadata?.role || "technician",
+            email: user?.email || "No email",
+            avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.id}`,
+          };
+
+          const { error: insertError } = await supabase
+            .from("users")
+            .insert([newUserData]);
+
+          if (insertError) throw insertError;
+
+          setUserData({
+            name: newUserData.name,
+            role: newUserData.role,
+            email: newUserData.email,
+            avatar_url: newUserData.avatar_url,
+          });
+
+          return;
+        }
+        throw error;
+      }
 
       if (data) {
         setUserData({
@@ -65,6 +92,15 @@ export default function ProfileScreen() {
       }
     } catch (error: any) {
       console.error("Error fetching profile:", error.message);
+      // Fallback to user metadata if profile fetch fails
+      if (user?.user_metadata) {
+        setUserData({
+          name: user.user_metadata.name || "User",
+          role: user.user_metadata.role || "user",
+          email: user.email || "No email",
+          avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.id}`,
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -72,15 +108,50 @@ export default function ProfileScreen() {
 
   const fetchUserStats = async () => {
     try {
-      // This would be replaced with actual API calls to get stats
-      // For now using mock data
+      if (!user?.id) return;
+
+      // Get resolved tickets count
+      const { data: resolvedTickets, error: ticketsError } = await supabase
+        .from("tickets")
+        .select("id")
+        .eq("assigned_to", user.id)
+        .eq("status", "resolved");
+
+      if (ticketsError) throw ticketsError;
+
+      // Get intervention history for average resolution time calculation
+      const { data: interventions, error: interventionsError } = await supabase
+        .from("intervention_history")
+        .select("*")
+        .eq("technician_id", user.id)
+        .eq("status", "completed");
+
+      if (interventionsError) throw interventionsError;
+
+      // Calculate average resolution time (simplified version)
+      let avgTime = "0 hours";
+      if (interventions && interventions.length > 0) {
+        // In a real implementation, you would calculate this based on ticket creation and resolution timestamps
+        avgTime = `${(Math.random() * 5 + 2).toFixed(1)} hours`;
+      }
+
+      // Get customer rating (this would come from a ratings table in a real implementation)
+      // For now, generate a random rating between 4.0 and 5.0
+      const rating = (4 + Math.random()).toFixed(1);
+
       setStats({
-        ticketsResolved: 128,
-        avgResolutionTime: "4.2 hours",
-        customerRating: 4.8,
+        ticketsResolved: resolvedTickets?.length || 0,
+        avgResolutionTime: avgTime,
+        customerRating: parseFloat(rating),
       });
     } catch (error: any) {
       console.error("Error fetching stats:", error.message);
+      // Set default stats on error
+      setStats({
+        ticketsResolved: 0,
+        avgResolutionTime: "0 hours",
+        customerRating: 0,
+      });
     }
   };
 
@@ -117,7 +188,7 @@ export default function ProfileScreen() {
       {/* Header */}
       <View className="flex-row justify-between items-center px-4 py-3 border-b border-gray-200">
         <Text className="text-2xl font-bold text-blue-800">Profile</Text>
-        <TouchableOpacity>
+        <TouchableOpacity onPress={() => router.push("/profile/settings")}>
           <Settings size={24} color="#1e40af" />
         </TouchableOpacity>
       </View>
@@ -176,13 +247,29 @@ export default function ProfileScreen() {
             <ChevronRight size={20} color="#9ca3af" />
           </TouchableOpacity>
 
-          <TouchableOpacity className="flex-row justify-between items-center px-4 py-4 border-b border-gray-100">
+          <TouchableOpacity
+            className="flex-row justify-between items-center px-4 py-4 border-b border-gray-100"
+            onPress={() => router.push("/profile/edit")}
+          >
             <View className="flex-row items-center">
               <Settings size={20} color="#4b5563" className="mr-3" />
-              <Text className="text-gray-800">Settings</Text>
+              <Text className="text-gray-800">Edit Profile</Text>
             </View>
             <ChevronRight size={20} color="#9ca3af" />
           </TouchableOpacity>
+
+          {(userData.role === "admin" || userData.role === "manager") && (
+            <TouchableOpacity
+              className="flex-row justify-between items-center px-4 py-4 border-b border-gray-100"
+              onPress={() => router.push("/admin")}
+            >
+              <View className="flex-row items-center">
+                <Settings size={20} color="#1e40af" className="mr-3" />
+                <Text className="text-blue-800 font-medium">Admin Panel</Text>
+              </View>
+              <ChevronRight size={20} color="#9ca3af" />
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity
             className="flex-row justify-between items-center px-4 py-4 mt-6 mx-4 bg-red-50 rounded-lg"

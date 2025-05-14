@@ -1,187 +1,308 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
-  TouchableOpacity,
-  Modal,
-  Animated,
+  SafeAreaView,
   Alert,
+  TouchableOpacity,
+  FlatList,
+  ActivityIndicator,
+  TextInput,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { StatusBar } from "expo-status-bar";
-import { useRouter } from "expo-router";
-import { BlurView } from "expo-blur";
-import { ArrowDownUp, X } from "lucide-react-native";
-import DeviceInventory from "../../components/DeviceInventory";
+import { supabase } from "../../lib/supabase";
+import DeviceCard from "../../components/DeviceCard";
 import AddDeviceForm from "../../components/AddDeviceForm";
-import BarcodeScanner from "../../components/BarcodeScanner";
-import DeviceMaintenanceScheduler from "../../components/DeviceMaintenanceScheduler";
 import DeviceStatusUpdater from "../../components/DeviceStatusUpdater";
+import DeviceMaintenanceScheduler from "../../components/DeviceMaintenanceScheduler";
+import { useAuth } from "../../components/AuthProvider";
+import { useRouter } from "expo-router";
+import {
+  Database,
+  Tag,
+  Upload,
+  Plus,
+  QrCode,
+  Search,
+} from "lucide-react-native";
+import { StatusBar } from "expo-status-bar";
+
+interface Device {
+  id: string;
+  name: string;
+  serial_number: string;
+  model: string;
+  status: string;
+  restaurant_id: string;
+  restaurant_name?: string;
+  last_maintenance?: string;
+}
 
 export default function DevicesScreen() {
+  const { user } = useAuth();
   const router = useRouter();
-  const [showAddDeviceForm, setShowAddDeviceForm] = useState(false);
-  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
+  const [showAddDevice, setShowAddDevice] = useState(false);
+  const [showStatusUpdater, setShowStatusUpdater] = useState(false);
   const [showMaintenanceScheduler, setShowMaintenanceScheduler] =
     useState(false);
-  const [showStatusUpdater, setShowStatusUpdater] = useState(false);
-  const [scannedSerial, setScannedSerial] = useState("");
-  const [selectedDevice, setSelectedDevice] = useState(null);
-  const [showMoveDeviceForm, setShowMoveDeviceForm] = useState(false);
+  const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
+  const [restaurants, setRestaurants] = useState<
+    { id: string; name: string }[]
+  >([]);
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Check authentication and fetch data
+  useEffect(() => {
+    if (!user) {
+      router.replace("/auth/login");
+    } else {
+      fetchRestaurants();
+      fetchDevices();
+    }
+  }, [user]);
+
+  const fetchRestaurants = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("restaurants")
+        .select("id, name");
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        setRestaurants(data);
+      }
+    } catch (error) {
+      console.error("Error fetching restaurants:", error);
+      Alert.alert("Error", "Failed to load restaurants");
+    }
+  };
+
+  const fetchDevices = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("devices")
+        .select(
+          `
+          *,
+          restaurants:restaurant_id(id, name)
+        `,
+        )
+        .order("name");
+
+      if (error) throw error;
+
+      if (data) {
+        const formattedDevices = data.map((device) => ({
+          ...device,
+          restaurant_name: device.restaurants?.name || "Unknown Restaurant",
+        }));
+        setDevices(formattedDevices);
+      }
+    } catch (error) {
+      console.error("Error fetching devices:", error);
+      Alert.alert("Error", "Failed to load devices");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleAddDevice = () => {
-    setShowAddDeviceForm(true);
+    setSelectedDevice(null);
+    setShowAddDevice(true);
   };
 
   const handleScanSerial = () => {
-    setShowBarcodeScanner(true);
+    router.push("/devices/scan");
   };
 
-  const handleBarcodeScan = (data: string) => {
-    setScannedSerial(data);
-    setShowBarcodeScanner(false);
-    setShowAddDeviceForm(true);
-  };
-
-  const handleSelectDevice = (device: any) => {
-    // Store the selected device for use in other components
+  const handleSelectDevice = (device: Device) => {
     setSelectedDevice(device);
   };
 
-  const handleScheduleMaintenance = (device: any) => {
+  const handleScheduleMaintenance = (device: Device) => {
     setSelectedDevice(device);
     setShowMaintenanceScheduler(true);
   };
 
-  const handleUpdateStatus = (device: any) => {
+  const handleUpdateStatus = (device: Device) => {
     setSelectedDevice(device);
     setShowStatusUpdater(true);
   };
 
-  const handleMoveDevice = (device: any) => {
-    setSelectedDevice(device);
-    setShowMoveDeviceForm(true);
+  const navigateToBulkImport = () => {
+    router.push("/devices/bulk-import");
   };
 
+  const navigateToCategories = () => {
+    router.push("/devices/categories");
+  };
+
+  const handleDeviceFormSuccess = () => {
+    setShowAddDevice(false);
+    fetchDevices(); // Refresh the device list
+  };
+
+  const handleStatusUpdateSuccess = (newStatus: string) => {
+    setShowStatusUpdater(false);
+    fetchDevices(); // Refresh the device list
+  };
+
+  const handleMaintenanceSuccess = () => {
+    setShowMaintenanceScheduler(false);
+    fetchDevices(); // Refresh the device list
+  };
+
+  const filteredDevices = devices.filter((device) => {
+    if (!searchQuery) return true;
+
+    return (
+      device.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      device.serial_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      device.restaurant_name?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  });
+
   return (
-    <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-gray-50">
       <StatusBar style="auto" />
 
-      {showAddDeviceForm ? (
+      {showAddDevice ? (
         <AddDeviceForm
-          onCancel={() => setShowAddDeviceForm(false)}
-          onSuccess={() => {
-            setShowAddDeviceForm(false);
-            // In a real app, you would refresh the device list here
-          }}
-          initialSerialNumber={scannedSerial}
-        />
-      ) : showMaintenanceScheduler && selectedDevice ? (
-        <DeviceMaintenanceScheduler
-          device={selectedDevice}
-          onCancel={() => setShowMaintenanceScheduler(false)}
-          onSuccess={() => {
-            setShowMaintenanceScheduler(false);
-            // In a real app, you would refresh the device list here
-          }}
+          onCancel={() => setShowAddDevice(false)}
+          onSuccess={handleDeviceFormSuccess}
+          restaurants={restaurants.map((r) => r.name)}
+          initialSerialNumber={selectedDevice?.serial_number}
         />
       ) : showStatusUpdater && selectedDevice ? (
         <DeviceStatusUpdater
-          device={selectedDevice}
-          onCancel={() => setShowStatusUpdater(false)}
-          onSuccess={() => {
-            setShowStatusUpdater(false);
-            // In a real app, you would refresh the device list here
+          device={{
+            id: selectedDevice.id,
+            name: selectedDevice.name,
+            serialNumber: selectedDevice.serial_number,
+            restaurant: selectedDevice.restaurant_name || "",
+            status: selectedDevice.status as
+              | "operational"
+              | "maintenance"
+              | "offline",
           }}
+          onCancel={() => setShowStatusUpdater(false)}
+          onSuccess={handleStatusUpdateSuccess}
         />
-      ) : showMoveDeviceForm && selectedDevice ? (
-        <View className="flex-1 bg-white p-4">
-          <View className="flex-row justify-between items-center mb-6">
-            <Text className="text-2xl font-bold">Move Device</Text>
-            <TouchableOpacity onPress={() => setShowMoveDeviceForm(false)}>
-              <X size={24} color="#666" />
-            </TouchableOpacity>
-          </View>
-
-          <View className="bg-gray-100 p-4 rounded-lg mb-4">
-            <Text className="font-bold text-lg">{selectedDevice.name}</Text>
-            <Text className="text-gray-600">
-              S/N: {selectedDevice.serialNumber}
-            </Text>
-            <Text className="mt-1">
-              Current Location:{" "}
-              <Text className="font-bold">{selectedDevice.restaurant}</Text>
-            </Text>
-          </View>
-
-          <Text className="text-gray-700 mb-3 font-medium">
-            Select New Restaurant
-          </Text>
-          <View className="mb-6">
-            {restaurants
-              .filter(
-                (r) =>
-                  r !== "All Restaurants" && r !== selectedDevice.restaurant,
-              )
-              .map((restaurant) => (
-                <TouchableOpacity
-                  key={restaurant}
-                  className="bg-white border border-gray-200 rounded-lg p-4 mb-2 flex-row justify-between items-center"
-                  onPress={() => {
-                    Alert.alert(
-                      "Move Device",
-                      `Are you sure you want to move ${selectedDevice.name} to ${restaurant}?`,
-                      [
-                        { text: "Cancel", style: "cancel" },
-                        {
-                          text: "Move",
-                          onPress: () => {
-                            // In a real app, this would update the device's restaurant in the database
-                            Alert.alert(
-                              "Success",
-                              `Device moved to ${restaurant}`,
-                            );
-                            setShowMoveDeviceForm(false);
-                          },
-                        },
-                      ],
-                    );
-                  }}
-                >
-                  <Text className="text-lg">{restaurant}</Text>
-                  <View className="bg-blue-100 p-2 rounded-full">
-                    <ArrowDownUp size={18} color="#1e40af" />
-                  </View>
-                </TouchableOpacity>
-              ))}
-          </View>
-        </View>
+      ) : showMaintenanceScheduler && selectedDevice ? (
+        <DeviceMaintenanceScheduler
+          device={{
+            id: selectedDevice.id,
+            name: selectedDevice.name,
+            serialNumber: selectedDevice.serial_number,
+            restaurant: selectedDevice.restaurant_name || "",
+            status: selectedDevice.status,
+          }}
+          onClose={() => setShowMaintenanceScheduler(false)}
+          onSuccess={handleMaintenanceSuccess}
+        />
       ) : (
-        <DeviceInventory
-          onAddDevice={handleAddDevice}
-          onScanSerial={handleScanSerial}
-          onSelectDevice={handleSelectDevice}
-          onScheduleMaintenance={handleScheduleMaintenance}
-          onUpdateStatus={handleUpdateStatus}
-          onMoveDevice={handleMoveDevice}
-        />
-      )}
+        <>
+          {/* Header */}
+          <View className="flex-row justify-between items-center px-5 py-4 bg-gradient-to-r from-blue-700 to-blue-900 shadow-lg">
+            <Text className="text-2xl font-bold text-white">
+              Restaurant Devices
+            </Text>
+            <View className="flex-row">
+              <TouchableOpacity
+                className="bg-blue-500 p-2.5 rounded-full mr-2 shadow-md"
+                onPress={handleScanSerial}
+              >
+                <QrCode size={22} color="white" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                className="bg-blue-500 p-2.5 rounded-full shadow-md"
+                onPress={handleAddDevice}
+              >
+                <Plus size={22} color="white" />
+              </TouchableOpacity>
+            </View>
+          </View>
 
-      {/* Barcode Scanner Modal */}
-      <Modal
-        visible={showBarcodeScanner}
-        animationType="fade"
-        transparent={true}
-        onRequestClose={() => setShowBarcodeScanner(false)}
-      >
-        <BlurView intensity={90} tint="dark" style={{ flex: 1 }}>
-          <BarcodeScanner
-            onScan={handleBarcodeScan}
-            onClose={() => setShowBarcodeScanner(false)}
-            mode="serial"
-          />
-        </BlurView>
-      </Modal>
+          {/* Admin Tools */}
+          <View className="bg-white p-4 border-b border-gray-200">
+            <Text className="font-bold text-lg mb-2">
+              Device Management Tools
+            </Text>
+            <View className="flex-row">
+              <TouchableOpacity
+                className="bg-blue-100 p-3 rounded-lg mr-2 flex-row items-center"
+                onPress={navigateToBulkImport}
+              >
+                <Upload size={18} color="#1e40af" />
+                <Text className="text-blue-800 ml-1">Bulk Import</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                className="bg-purple-100 p-3 rounded-lg flex-row items-center"
+                onPress={navigateToCategories}
+              >
+                <Tag size={18} color="#7e22ce" />
+                <Text className="text-purple-800 ml-1">Categories</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Search */}
+          <View className="p-4 bg-white shadow-sm">
+            <View className="flex-row items-center bg-gray-100 rounded-xl px-4 py-3">
+              <Search size={20} color="#4b5563" />
+              <TextInput
+                className="flex-1 ml-3 py-1 text-base"
+                placeholder="Search devices..."
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholderTextColor="#9ca3af"
+              />
+            </View>
+          </View>
+
+          {/* Device list */}
+          <View className="flex-1 p-4">
+            {loading ? (
+              <View className="flex-1 justify-center items-center">
+                <ActivityIndicator size="large" color="#1e40af" />
+                <Text className="mt-2 text-gray-600">Loading devices...</Text>
+              </View>
+            ) : filteredDevices.length > 0 ? (
+              <FlatList
+                data={filteredDevices}
+                renderItem={({ item }) => (
+                  <DeviceCard
+                    device={item}
+                    onPress={() => {
+                      setSelectedDevice(item);
+                      setShowStatusUpdater(true);
+                    }}
+                  />
+                )}
+                keyExtractor={(item) => item.id}
+                showsVerticalScrollIndicator={false}
+              />
+            ) : (
+              <View className="flex-1 justify-center items-center">
+                <Text className="text-gray-500 text-center">
+                  {searchQuery
+                    ? "No devices match your search"
+                    : "No devices found"}
+                </Text>
+                <TouchableOpacity
+                  className="mt-4 bg-blue-600 px-4 py-2 rounded-lg"
+                  onPress={handleAddDevice}
+                >
+                  <Text className="text-white font-medium">Add Device</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </>
+      )}
     </SafeAreaView>
   );
 }

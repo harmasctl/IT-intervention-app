@@ -8,7 +8,6 @@ import {
   ActivityIndicator,
   Modal,
   Alert,
-  BlurView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
@@ -26,6 +25,7 @@ import { supabase } from "../../lib/supabase";
 import AddEquipmentForm from "../../components/AddEquipmentForm";
 import EquipmentMovementForm from "../../components/EquipmentMovementForm";
 import BarcodeScanner from "../../components/BarcodeScanner";
+import EquipmentTabs from "../../components/EquipmentTabs";
 
 type EquipmentItem = {
   id: string;
@@ -34,6 +34,10 @@ type EquipmentItem = {
   stock_level: number;
   supplier: string | null;
   warehouse_location: string | null;
+  notes?: string | null;
+  image_url?: string | null;
+  created_at?: string;
+  updated_at?: string;
 };
 
 export default function EquipmentInventoryScreen() {
@@ -66,54 +70,22 @@ export default function EquipmentInventoryScreen() {
     try {
       setLoading(true);
 
-      // In a real app, this would fetch from Supabase
-      // For now, using mock data
-      const mockEquipment: EquipmentItem[] = [
-        {
-          id: "1",
-          name: "Ice Machine Compressor",
-          type: "Spare Parts",
-          stock_level: 5,
-          supplier: "CoolTech Supplies",
-          warehouse_location: "A-12-B",
-        },
-        {
-          id: "2",
-          name: "Digital Thermometer",
-          type: "Tools",
-          stock_level: 12,
-          supplier: "Tech Instruments Inc.",
-          warehouse_location: "B-03-C",
-        },
-        {
-          id: "3",
-          name: "Refrigerator Coil Cleaner",
-          type: "Cleaning Supplies",
-          stock_level: 24,
-          supplier: "CleanPro Solutions",
-          warehouse_location: "C-05-A",
-        },
-        {
-          id: "4",
-          name: "POS Terminal Battery",
-          type: "Electronics",
-          stock_level: 8,
-          supplier: "ElectroParts Ltd.",
-          warehouse_location: "D-01-B",
-        },
-        {
-          id: "5",
-          name: "Fryer Heating Element",
-          type: "Spare Parts",
-          stock_level: 3,
-          supplier: "Kitchen Equipment Co.",
-          warehouse_location: "A-08-D",
-        },
-      ];
+      const { data, error } = await supabase
+        .from("equipment")
+        .select("*")
+        .order("name");
 
-      setEquipment(mockEquipment);
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        setEquipment(data as EquipmentItem[]);
+      } else {
+        setEquipment([]);
+      }
     } catch (error) {
       console.error("Error fetching equipment:", error);
+      Alert.alert("Error", "Failed to load equipment inventory");
+      setEquipment([]);
     } finally {
       setLoading(false);
     }
@@ -128,41 +100,59 @@ export default function EquipmentInventoryScreen() {
     setShowBarcodeScanner(true);
   };
 
-  const handleBarcodeScan = (data: string) => {
+  const handleBarcodeScan = async (data: string) => {
     setShowBarcodeScanner(false);
 
-    if (scanMode === "equipment") {
-      // Find equipment by barcode
-      const found = equipment.find((item) => item.id === data);
-      if (found) {
-        setSelectedEquipment(found);
+    try {
+      // For demo purposes, we'll simulate finding the item by ID or creating a mock item
+      // In a real app, this would query Supabase
+
+      // Try to find the item in our local state first (for demo)
+      const foundItem = equipment.find((item) => item.id === data);
+
+      if (foundItem) {
+        setSelectedEquipment(foundItem);
         setShowMovementForm(true);
-      } else {
-        Alert.alert(
-          "Equipment Not Found",
-          "No equipment found with this barcode. Would you like to add it?",
-          [
-            { text: "Cancel", style: "cancel" },
-            { text: "Add New", onPress: handleAddEquipment },
-          ],
-        );
+        return;
       }
-    } else {
-      // Stock scanning logic
-      Alert.alert(
-        "Stock Item Scanned",
-        `Stock item with ID ${data} scanned. Update inventory?`,
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Update",
-            onPress: () => {
-              // In a real app, this would open a form to update the stock
-              Alert.alert("Success", "Stock updated successfully");
-            },
-          },
-        ],
-      );
+
+      // If not found locally, try Supabase
+      const { data: equipmentData, error } = await supabase
+        .from("equipment")
+        .select("*")
+        .eq("id", data)
+        .single();
+
+      if (error) {
+        // If not found in database, offer to create new
+        if (scanMode === "equipment") {
+          Alert.alert(
+            "Equipment Not Found",
+            "No equipment found with this barcode. Would you like to add it?",
+            [
+              { text: "Cancel", style: "cancel" },
+              { text: "Add New", onPress: handleAddEquipment },
+            ],
+          );
+        } else {
+          // For stock scanning mode
+          Alert.alert(
+            "Stock Item Not Found",
+            "No stock item found with this barcode.",
+            [{ text: "OK" }],
+          );
+        }
+        return;
+      }
+
+      // If found in database
+      if (equipmentData) {
+        setSelectedEquipment(equipmentData as EquipmentItem);
+        setShowMovementForm(true);
+      }
+    } catch (error) {
+      console.error("Error scanning barcode:", error);
+      Alert.alert("Error", "Failed to process barcode scan");
     }
   };
 
@@ -191,38 +181,54 @@ export default function EquipmentInventoryScreen() {
 
   const renderEquipmentItem = ({ item }: { item: EquipmentItem }) => (
     <TouchableOpacity
-      className="bg-white rounded-lg p-4 mb-3 shadow-sm border border-gray-100"
+      className="bg-white rounded-xl p-5 mb-4 shadow-md mx-1"
       onPress={() => handleEquipmentPress(item.id)}
+      style={{ elevation: 2 }}
+      activeOpacity={0.7}
     >
       <View className="flex-row justify-between items-start">
         <View className="flex-1">
           <Text className="font-bold text-lg text-gray-800">{item.name}</Text>
-          <Text className="text-gray-600 mb-1">{item.type}</Text>
+          <View className="bg-blue-100 self-start px-3 py-1 rounded-full mt-1 mb-2">
+            <Text className="text-blue-800 text-xs font-medium">
+              {item.type}
+            </Text>
+          </View>
 
-          <View className="flex-row items-center mt-2">
-            <Text className="text-gray-700">Location: </Text>
-            <Text className="font-medium">
+          <View className="flex-row items-center mt-2 bg-gray-50 p-2 rounded-lg">
+            <Text className="text-gray-500 font-medium">Location: </Text>
+            <Text className="text-gray-800 font-medium">
               {item.warehouse_location || "Not specified"}
             </Text>
           </View>
 
-          <Text className="text-gray-500 text-sm mt-1">
-            Supplier: {item.supplier || "Not specified"}
+          <Text className="text-gray-500 text-sm mt-3">
+            Supplier:{" "}
+            <Text className="font-medium text-gray-700">
+              {item.supplier || "Not specified"}
+            </Text>
           </Text>
         </View>
 
         <View className="items-end">
-          <View className="bg-gray-100 px-3 py-2 rounded-lg">
+          <View
+            className={`px-4 py-3 rounded-xl ${item.stock_level <= 3 ? "bg-red-100" : item.stock_level <= 10 ? "bg-amber-100" : "bg-green-100"}`}
+          >
             <Text
-              className={`font-bold ${getStockLevelColor(item.stock_level)}`}
+              className={`font-bold text-base ${getStockLevelColor(item.stock_level)}`}
             >
               {item.stock_level} in stock
             </Text>
           </View>
-          <View className="flex-row items-center mt-2">
-            <ArrowDownUp size={14} color="#6b7280" />
-            <Text className="text-gray-500 text-xs ml-1">Manage Stock</Text>
-          </View>
+          <TouchableOpacity
+            className="flex-row items-center mt-3 bg-gray-100 px-3 py-2 rounded-lg"
+            onPress={() => handleEquipmentPress(item.id)}
+          >
+            <ArrowDownUp size={14} color="#4b5563" />
+            <Text className="text-gray-700 text-xs font-medium ml-1">
+              Manage Stock
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
     </TouchableOpacity>
@@ -258,41 +264,42 @@ export default function EquipmentInventoryScreen() {
       ) : (
         <>
           {/* Header */}
-          <View className="flex-row justify-between items-center px-4 py-3 border-b border-gray-200">
-            <Text className="text-2xl font-bold text-blue-800">
+          <View className="flex-row justify-between items-center px-5 py-4 bg-gradient-to-r from-blue-700 to-blue-900 shadow-lg">
+            <Text className="text-2xl font-bold text-white">
               Warehouse Stock
             </Text>
             <View className="flex-row">
               <TouchableOpacity
-                className="bg-green-600 p-2 rounded-full mr-2"
+                className="bg-green-500 p-2.5 rounded-full mr-3 shadow-md"
                 onPress={() => handleScanBarcode("equipment")}
               >
-                <Camera size={24} color="white" />
+                <Camera size={22} color="white" />
               </TouchableOpacity>
               <TouchableOpacity
-                className="bg-blue-600 p-2 rounded-full"
+                className="bg-blue-500 p-2.5 rounded-full shadow-md"
                 onPress={handleAddEquipment}
               >
-                <Plus size={24} color="white" />
+                <Plus size={22} color="white" />
               </TouchableOpacity>
             </View>
           </View>
 
-          <View className="flex-1 bg-gray-50">
+          <View className="flex-1 bg-gray-100">
             {/* Search and Filter */}
-            <View className="p-4">
-              <View className="flex-row items-center bg-white rounded-lg px-3 py-2 mb-3 border border-gray-200">
-                <Search size={20} color="#6b7280" />
+            <View className="p-4 bg-white shadow-sm">
+              <View className="flex-row items-center bg-gray-100 rounded-xl px-4 py-3 mb-4">
+                <Search size={20} color="#4b5563" />
                 <TextInput
-                  className="flex-1 ml-2 py-1"
-                  placeholder="Search stock items by name or supplier"
+                  className="flex-1 ml-3 py-1 text-base"
+                  placeholder="Search stock items..."
                   value={searchQuery}
                   onChangeText={setSearchQuery}
+                  placeholderTextColor="#9ca3af"
                 />
               </View>
 
               <View className="mb-2">
-                <Text className="text-gray-700 mb-2 font-medium">
+                <Text className="text-gray-700 mb-3 font-medium">
                   Filter by type:
                 </Text>
                 <FlatList
@@ -300,12 +307,15 @@ export default function EquipmentInventoryScreen() {
                   data={equipmentTypes}
                   renderItem={({ item }) => (
                     <TouchableOpacity
-                      className={`px-4 py-2 mr-2 rounded-full ${selectedType === item ? "bg-blue-500" : "bg-white border border-gray-300"}`}
+                      className={`px-5 py-2.5 mr-3 rounded-full shadow-sm ${selectedType === item ? "bg-blue-600" : "bg-white"}`}
                       onPress={() => setSelectedType(item)}
+                      style={{ elevation: selectedType === item ? 3 : 1 }}
                     >
                       <Text
                         className={
-                          selectedType === item ? "text-white" : "text-gray-700"
+                          selectedType === item
+                            ? "text-white font-medium"
+                            : "text-gray-700"
                         }
                       >
                         {item}
@@ -314,6 +324,7 @@ export default function EquipmentInventoryScreen() {
                   )}
                   keyExtractor={(item) => item}
                   showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ paddingBottom: 8 }}
                 />
               </View>
             </View>
@@ -352,6 +363,9 @@ export default function EquipmentInventoryScreen() {
               )}
             </View>
           </View>
+
+          {/* Bottom Tabs */}
+          <EquipmentTabs activeTab="inventory" />
         </>
       )}
 
@@ -362,13 +376,13 @@ export default function EquipmentInventoryScreen() {
         transparent={true}
         onRequestClose={() => setShowBarcodeScanner(false)}
       >
-        <BlurView intensity={90} tint="dark" style={{ flex: 1 }}>
+        <View style={{ flex: 1 }}>
           <BarcodeScanner
             onScan={handleBarcodeScan}
             onClose={() => setShowBarcodeScanner(false)}
             mode={scanMode}
           />
-        </BlurView>
+        </View>
       </Modal>
     </SafeAreaView>
   );

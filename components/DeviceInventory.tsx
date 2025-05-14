@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   FlatList,
   ScrollView,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import {
   Camera,
@@ -17,6 +18,7 @@ import {
   Smartphone,
 } from "lucide-react-native";
 import { Image } from "expo-image";
+import { supabase } from "../lib/supabase";
 
 interface Device {
   id: string;
@@ -48,103 +50,117 @@ interface DeviceInventoryProps {
 }
 
 const DeviceInventory = ({
-  devices = [
-    {
-      id: "1",
-      name: "POS Terminal",
-      serialNumber: "POS-2023-001",
-      restaurant: "Bella Italia",
-      status: "operational",
-      lastMaintenance: "2023-10-15",
-      image:
-        "https://images.unsplash.com/photo-1516997121675-4c2d1684aa3e?w=400&q=80",
-    },
-    {
-      id: "2",
-      name: "Kitchen Display",
-      serialNumber: "KD-2022-045",
-      restaurant: "Bella Italia",
-      status: "maintenance",
-      lastMaintenance: "2023-11-20",
-      image:
-        "https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=400&q=80",
-    },
-    {
-      id: "3",
-      name: "Digital Menu Board",
-      serialNumber: "DMB-2023-012",
-      restaurant: "Sushi Express",
-      status: "offline",
-      lastMaintenance: "2023-09-05",
-      image:
-        "https://images.unsplash.com/photo-1563203369-26f2e4a5ccf7?w=400&q=80",
-    },
-    {
-      id: "4",
-      name: "Self-Order Kiosk",
-      serialNumber: "SOK-2022-089",
-      restaurant: "Burger Junction",
-      status: "operational",
-      lastMaintenance: "2023-12-01",
-      image:
-        "https://images.unsplash.com/photo-1581092335397-9583eb92d232?w=400&q=80",
-    },
-  ],
-  restaurants = [
-    "All Restaurants",
-    "Bella Italia",
-    "Sushi Express",
-    "Burger Junction",
-    "Pizza Palace",
-  ],
-  onAddDevice = () => console.log("Add device"),
-  onScanSerial = () => console.log("Scan serial"),
-  onSelectDevice = (device) => console.log("Selected device:", device),
-  onScheduleMaintenance = (device) =>
-    console.log("Schedule maintenance:", device),
-  onUpdateStatus = (device) => console.log("Update status:", device),
-  onMoveDevice = (device) => console.log("Move device:", device),
+  onAddDevice = () => {},
+  onScanSerial = () => {},
+  onSelectDevice = (device) => {},
+  onScheduleMaintenance = (device) => {},
+  onUpdateStatus = (device) => {},
+  onMoveDevice = (device) => {},
 }: DeviceInventoryProps) => {
-  // In a real implementation, we would fetch from Supabase here
-  // useEffect(() => {
-  //   const fetchDevices = async () => {
-  //     const { data, error } = await supabase
-  //       .from('devices')
-  //       .select('*, restaurants(name)');
-  //     if (data) {
-  //       // Transform data to match the expected format
-  //     }
-  //   };
-  //   fetchDevices();
-  // }, []);
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [restaurants, setRestaurants] = useState<string[]>(["All Restaurants"]);
+  const [loading, setLoading] = useState(true);
   const [selectedRestaurant, setSelectedRestaurant] =
     useState("All Restaurants");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
+  const [maintenanceHistory, setMaintenanceHistory] = useState<
+    MaintenanceRecord[]
+  >([]);
 
-  const maintenanceHistory: MaintenanceRecord[] = [
-    {
-      id: "1",
-      date: "2023-10-15",
-      technician: "John Smith",
-      description: "Routine maintenance and software update",
-      resolved: true,
-    },
-    {
-      id: "2",
-      date: "2023-08-22",
-      technician: "Maria Garcia",
-      description: "Replaced faulty touchscreen",
-      resolved: true,
-    },
-    {
-      id: "3",
-      date: "2023-11-20",
-      technician: "David Chen",
-      description: "System not booting, investigating hardware issue",
-      resolved: false,
-    },
-  ];
+  useEffect(() => {
+    fetchDevices();
+    fetchRestaurants();
+  }, []);
+
+  const fetchDevices = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase.from("devices").select(`
+          *,
+          restaurants:restaurant_id(name)
+        `);
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        // Transform data to match the expected format
+        const formattedDevices = data.map((device) => ({
+          id: device.id,
+          name: device.name,
+          serialNumber: device.serial_number,
+          restaurant: device.restaurants?.name || "Unknown Restaurant",
+          status: device.status,
+          lastMaintenance: device.last_maintenance
+            ? new Date(device.last_maintenance).toISOString().split("T")[0]
+            : "Never",
+          image: device.image,
+        }));
+
+        setDevices(formattedDevices);
+      } else {
+        // If no devices found, set empty array
+        setDevices([]);
+      }
+    } catch (error) {
+      console.error("Error fetching devices:", error);
+      Alert.alert("Error", "Failed to load devices");
+      setDevices([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchRestaurants = async () => {
+    try {
+      const { data, error } = await supabase.from("restaurants").select("name");
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        const restaurantNames = ["All Restaurants", ...data.map((r) => r.name)];
+        setRestaurants(restaurantNames);
+      }
+    } catch (error) {
+      console.error("Error fetching restaurants:", error);
+      Alert.alert("Error", "Failed to load restaurants");
+    }
+  };
+
+  const fetchMaintenanceHistory = async (deviceId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from("maintenance_records")
+        .select(
+          `
+          *,
+          users:technician_id(name)
+        `,
+        )
+        .eq("device_id", deviceId);
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        // Transform data to match the expected format
+        const formattedRecords = data.map((record) => ({
+          id: record.id,
+          date: new Date(record.date).toISOString().split("T")[0],
+          technician: record.users?.name || "Unknown Technician",
+          description: record.description,
+          resolved: record.resolved,
+        }));
+
+        setMaintenanceHistory(formattedRecords);
+      } else {
+        setMaintenanceHistory([]);
+      }
+    } catch (error) {
+      console.error("Error fetching maintenance history:", error);
+      Alert.alert("Error", "Failed to load maintenance history");
+      setMaintenanceHistory([]);
+    }
+  };
 
   const filteredDevices = devices.filter((device) => {
     const matchesRestaurant =
@@ -159,6 +175,7 @@ const DeviceInventory = ({
   const handleDeviceSelect = (device: Device) => {
     setSelectedDevice(device);
     onSelectDevice(device);
+    fetchMaintenanceHistory(device.id);
   };
 
   const getStatusColor = (status: string) => {
@@ -267,17 +284,26 @@ const DeviceInventory = ({
             </ScrollView>
           </View>
 
-          <FlatList
-            data={filteredDevices}
-            renderItem={renderDeviceItem}
-            keyExtractor={(item) => item.id}
-            showsVerticalScrollIndicator={false}
-            ListEmptyComponent={
-              <View className="items-center justify-center py-10">
-                <Text className="text-gray-500">No devices found</Text>
-              </View>
-            }
-          />
+          {loading ? (
+            <View className="flex-1 justify-center items-center">
+              <ActivityIndicator size="large" color="#1e40af" />
+              <Text className="mt-2 text-gray-600">Loading devices...</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={filteredDevices}
+              renderItem={renderDeviceItem}
+              keyExtractor={(item) => item.id}
+              showsVerticalScrollIndicator={false}
+              refreshing={loading}
+              onRefresh={fetchDevices}
+              ListEmptyComponent={
+                <View className="items-center justify-center py-10">
+                  <Text className="text-gray-500">No devices found</Text>
+                </View>
+              }
+            />
+          )}
         </>
       ) : (
         // Device Detail View
@@ -339,27 +365,35 @@ const DeviceInventory = ({
 
           <View className="mb-4">
             <Text className="text-lg font-bold mb-2">Maintenance History</Text>
-            {maintenanceHistory.map((record) => (
-              <View
-                key={record.id}
-                className="bg-white rounded-lg p-4 mb-3 shadow-sm border border-gray-200"
-              >
-                <View className="flex-row justify-between items-start">
-                  <Text className="font-medium">{record.date}</Text>
-                  <View
-                    className={`px-2 py-1 rounded-full ${record.resolved ? "bg-green-500" : "bg-yellow-500"}`}
-                  >
-                    <Text className="text-white text-xs">
-                      {record.resolved ? "Resolved" : "In Progress"}
-                    </Text>
+            {maintenanceHistory.length > 0 ? (
+              maintenanceHistory.map((record) => (
+                <View
+                  key={record.id}
+                  className="bg-white rounded-lg p-4 mb-3 shadow-sm border border-gray-200"
+                >
+                  <View className="flex-row justify-between items-start">
+                    <Text className="font-medium">{record.date}</Text>
+                    <View
+                      className={`px-2 py-1 rounded-full ${record.resolved ? "bg-green-500" : "bg-yellow-500"}`}
+                    >
+                      <Text className="text-white text-xs">
+                        {record.resolved ? "Resolved" : "In Progress"}
+                      </Text>
+                    </View>
                   </View>
+                  <Text className="text-gray-600 mt-1">
+                    Technician: {record.technician}
+                  </Text>
+                  <Text className="mt-2">{record.description}</Text>
                 </View>
-                <Text className="text-gray-600 mt-1">
-                  Technician: {record.technician}
+              ))
+            ) : (
+              <View className="bg-white rounded-lg p-4 items-center justify-center">
+                <Text className="text-gray-500">
+                  No maintenance records found
                 </Text>
-                <Text className="mt-2">{record.description}</Text>
               </View>
-            ))}
+            )}
           </View>
 
           <View className="mb-10">

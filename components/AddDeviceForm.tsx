@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,7 +7,7 @@ import {
   ScrollView,
   Alert,
 } from "react-native";
-import { Camera, X } from "lucide-react-native";
+import { X, Camera } from "lucide-react-native";
 import { Image } from "expo-image";
 import { supabase } from "../lib/supabase";
 
@@ -111,29 +111,64 @@ const AddDeviceForm = ({
     setIsSubmitting(true);
 
     try {
-      // In a real app, this would save to Supabase
-      // const { data, error } = await supabase.from('devices').insert({
-      //   name,
-      //   serial_number: serialNumber,
-      //   restaurant,
-      //   notes,
-      //   image,
-      //   status: 'operational',
-      //   last_maintenance: new Date().toISOString().split('T')[0],
-      //   custom_fields: fields.reduce((acc, field) => {
-      //     acc[field.id] = field.value;
-      //     return acc;
-      //   }, {}),
-      // });
+      // Get restaurant_id from restaurant name
+      const { data: restaurantData, error: restaurantError } = await supabase
+        .from("restaurants")
+        .select("id")
+        .eq("name", restaurant)
+        .single();
 
-      // if (error) throw error;
+      if (restaurantError) {
+        // If restaurant doesn't exist, create it
+        const { data: newRestaurant, error: createError } = await supabase
+          .from("restaurants")
+          .insert({ name: restaurant })
+          .select();
 
-      // Mock successful submission
-      setTimeout(() => {
-        Alert.alert("Success", "Device added successfully");
-        onSuccess();
-      }, 1000);
-    } catch (error) {
+        if (createError) throw createError;
+
+        if (!newRestaurant || newRestaurant.length === 0) {
+          throw new Error("Failed to create restaurant");
+        }
+
+        // Save to Supabase
+        const { error } = await supabase.from("devices").insert({
+          name,
+          serial_number: serialNumber,
+          restaurant_id: newRestaurant[0].id,
+          notes,
+          image_url: image,
+          status: "operational",
+          last_maintenance: new Date().toISOString(),
+          custom_fields: fields.reduce((acc: any, field) => {
+            acc[field.id] = field.value;
+            return acc;
+          }, {}),
+        });
+
+        if (error) throw error;
+      } else {
+        // Save to Supabase with existing restaurant
+        const { error } = await supabase.from("devices").insert({
+          name,
+          serial_number: serialNumber,
+          restaurant_id: restaurantData.id,
+          notes,
+          image_url: image,
+          status: "operational",
+          last_maintenance: new Date().toISOString(),
+          custom_fields: fields.reduce((acc: any, field) => {
+            acc[field.id] = field.value;
+            return acc;
+          }, {}),
+        });
+
+        if (error) throw error;
+      }
+
+      Alert.alert("Success", "Device added successfully");
+      onSuccess();
+    } catch (error: any) {
       console.error("Error adding device:", error);
       Alert.alert("Error", "Failed to add device. Please try again.");
     } finally {
@@ -281,7 +316,7 @@ const AddDeviceForm = ({
             <View className="relative">
               <Image
                 source={{ uri: image }}
-                className="w-full h-48 rounded-lg"
+                style={{ width: "100%", height: 192 }}
                 contentFit="cover"
               />
               <TouchableOpacity

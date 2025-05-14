@@ -69,32 +69,36 @@ const DeviceStatusUpdater = ({
     setIsSubmitting(true);
 
     try {
-      // In a real app, this would save to Supabase
-      // const { error } = await supabase
-      //   .from('devices')
-      //   .update({
-      //     status: selectedStatus,
-      //     last_status_update: new Date().toISOString()
-      //   })
-      //   .eq('id', device.id);
+      // Update the device status in Supabase
+      const { error } = await supabase
+        .from("devices")
+        .update({
+          status: selectedStatus,
+          last_status_update: new Date().toISOString(),
+        })
+        .eq("id", device.id);
 
-      // if (error) throw error;
+      if (error) throw error;
 
       // Also log the status change in a history table
-      // await supabase.from('device_status_history').insert({
-      //   device_id: device.id,
-      //   previous_status: device.status,
-      //   new_status: selectedStatus,
-      //   notes: notes,
-      //   timestamp: new Date().toISOString()
-      // });
+      const { error: historyError } = await supabase
+        .from("device_status_history")
+        .insert({
+          device_id: device.id,
+          previous_status: device.status,
+          new_status: selectedStatus,
+          notes: notes,
+          timestamp: new Date().toISOString(),
+        });
 
-      // Mock successful submission
-      setTimeout(() => {
-        Alert.alert("Success", "Device status updated successfully", [
-          { text: "OK", onPress: () => onSuccess(selectedStatus) },
-        ]);
-      }, 1000);
+      if (historyError) {
+        console.error("Error logging status history:", historyError);
+        // Continue anyway since the main update was successful
+      }
+
+      Alert.alert("Success", "Device status updated successfully", [
+        { text: "OK", onPress: () => onSuccess(selectedStatus) },
+      ]);
     } catch (error) {
       console.error("Error updating device status:", error);
       Alert.alert("Error", "Failed to update device status. Please try again.");

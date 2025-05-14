@@ -34,17 +34,21 @@ const EquipmentTabs = ({ activeTab }: EquipmentTabsProps) => {
   ];
 
   return (
-    <View className="flex-row bg-white border-t border-gray-200">
+    <View className="flex-row bg-white border-t border-gray-200 shadow-md">
       {tabs.map((tab) => (
         <TouchableOpacity
           key={tab.id}
-          className={`flex-1 py-3 items-center ${activeTab === tab.id ? "border-t-2 border-blue-600" : ""}`}
+          className={`flex-1 py-4 items-center ${activeTab === tab.id ? "border-b-3 border-blue-600 bg-blue-50" : ""}`}
           onPress={() => router.push(tab.route)}
         >
-          <tab.icon
-            size={20}
-            color={activeTab === tab.id ? "#2563eb" : "#6b7280"}
-          />
+          <View
+            className={`p-2 rounded-full ${activeTab === tab.id ? "bg-blue-100" : ""}`}
+          >
+            <tab.icon
+              size={20}
+              color={activeTab === tab.id ? "#2563eb" : "#6b7280"}
+            />
+          </View>
           <Text
             className={`text-xs mt-1 ${activeTab === tab.id ? "text-blue-600 font-medium" : "text-gray-500"}`}
           >

@@ -1,15 +1,25 @@
-import React, { useState } from "react";
-import { View, Text, TouchableOpacity, FlatList, Image } from "react-native";
+import React, { useState, useEffect } from "react";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  FlatList,
+  Image,
+  ActivityIndicator,
+  TextInput,
+} from "react-native";
 import { useRouter } from "expo-router";
+import { supabase } from "../lib/supabase";
 import {
   AlertCircle,
   Clock,
   CheckCircle,
   ChevronRight,
+  Search,
 } from "lucide-react-native";
 
 type Priority = "low" | "medium" | "high";
-type Status = "new" | "in-progress" | "resolved";
+type Status = "new" | "assigned" | "in-progress" | "resolved";
 
 interface Ticket {
   id: string;
@@ -27,86 +37,67 @@ interface TicketListProps {
   onTicketPress?: (ticketId: string) => void;
 }
 
-const TicketList = ({
-  tickets = [
-    {
-      id: "1",
-      title: "Ice machine not cooling properly",
-      priority: "high",
-      restaurantName: "Burger Palace",
-      deviceAffected: "Ice Machine XL-500",
-      assignedTo: "John Doe",
-      status: "new",
-      createdAt: "2023-06-15T10:30:00Z",
-    },
-    {
-      id: "2",
-      title: "Fryer temperature inconsistent",
-      priority: "medium",
-      restaurantName: "Pizza Heaven",
-      deviceAffected: "Commercial Fryer F-200",
-      assignedTo: null,
-      status: "new",
-      createdAt: "2023-06-14T14:45:00Z",
-    },
-    {
-      id: "3",
-      title: "Dishwasher leaking water",
-      priority: "medium",
-      restaurantName: "Noodle House",
-      deviceAffected: "Industrial Dishwasher D-1000",
-      assignedTo: "Jane Smith",
-      status: "in-progress",
-      createdAt: "2023-06-13T09:15:00Z",
-    },
-    {
-      id: "4",
-      title: "Refrigerator not maintaining temperature",
-      priority: "high",
-      restaurantName: "Seafood Shack",
-      deviceAffected: "Walk-in Refrigerator R-300",
-      assignedTo: "Mike Johnson",
-      status: "in-progress",
-      createdAt: "2023-06-12T16:20:00Z",
-    },
-    {
-      id: "5",
-      title: "Oven heating element replacement",
-      priority: "low",
-      restaurantName: "Bakery Delight",
-      deviceAffected: "Commercial Oven O-750",
-      assignedTo: "Sarah Williams",
-      status: "resolved",
-      createdAt: "2023-06-10T11:00:00Z",
-    },
-  ],
-  onTicketPress = () => {},
-}: TicketListProps) => {
+const TicketList = ({ onTicketPress = () => {} }: TicketListProps) => {
   const [activeFilter, setActiveFilter] = useState<Status | "all">("all");
   const router = useRouter();
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
 
-  // In a real implementation, we would fetch from Supabase here
-  // useEffect(() => {
-  //   const fetchTickets = async () => {
-  //     const { data, error } = await supabase
-  //       .from('tickets')
-  //       .select(`
-  //         *,
-  //         restaurants:restaurant_id(name),
-  //         devices:device_id(name),
-  //         users:assigned_to(name)
-  //       `);
-  //     if (data) {
-  //       // Transform data to match the expected format
-  //     }
-  //   };
-  //   fetchTickets();
-  // }, []);
+  useEffect(() => {
+    fetchTickets();
+  }, []);
 
-  const filteredTickets =
-    activeFilter === "all"
-      ? tickets
-      : tickets.filter((ticket) => ticket.status === activeFilter);
+  const fetchTickets = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase.from("tickets").select(`
+          *,
+          restaurants:restaurant_id(name),
+          devices:device_id(name),
+          users:assigned_to(name)
+        `);
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        // Transform data to match the expected format
+        const formattedTickets = data.map((ticket) => ({
+          id: ticket.id,
+          title: ticket.title,
+          priority: ticket.priority,
+          restaurantName: ticket.restaurants?.name || "Unknown Restaurant",
+          deviceAffected: ticket.devices?.name || "Unknown Device",
+          assignedTo: ticket.users?.name || null,
+          status: ticket.status,
+          createdAt: ticket.created_at,
+        }));
+
+        setTickets(formattedTickets);
+        console.log("Fetched tickets from database:", formattedTickets.length);
+      } else {
+        // If no tickets found, set empty array
+        setTickets([]);
+      }
+    } catch (error) {
+      console.error("Error fetching tickets:", error);
+      setTickets([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredTickets = tickets.filter((ticket) => {
+    const matchesSearch = searchQuery
+      ? ticket.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        ticket.restaurantName.toLowerCase().includes(searchQuery.toLowerCase())
+      : true;
+
+    const matchesFilter =
+      activeFilter === "all" ? true : ticket.status === activeFilter;
+
+    return matchesSearch && matchesFilter;
+  });
 
   const handleTicketPress = (ticketId: string) => {
     onTicketPress(ticketId);
@@ -173,7 +164,7 @@ const TicketList = ({
                 source={{
                   uri: `https://api.dicebear.com/7.x/avataaars/svg?seed=${item.assignedTo}`,
                 }}
-                className="w-6 h-6 rounded-full bg-gray-200"
+                style={{ width: 24, height: 24, borderRadius: 12 }}
               />
               <Text className="ml-1 text-xs text-gray-500">
                 {item.assignedTo}
@@ -192,6 +183,17 @@ const TicketList = ({
 
   return (
     <View className="flex-1 bg-gray-50 p-4">
+      {/* Search bar */}
+      <View className="bg-white rounded-lg px-4 py-2 mb-4 flex-row items-center shadow-sm">
+        <Search size={20} color="#6b7280" />
+        <TextInput
+          className="flex-1 ml-2 py-1"
+          placeholder="Search tickets..."
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
+      </View>
+
       {/* Filter tabs */}
       <View className="flex-row bg-white rounded-lg mb-4 p-1 shadow-sm">
         {["all", "new", "in-progress", "resolved"].map((filter) => (
@@ -212,17 +214,34 @@ const TicketList = ({
       </View>
 
       {/* Ticket list */}
-      {filteredTickets.length > 0 ? (
+      {loading ? (
+        <View className="flex-1 justify-center items-center">
+          <ActivityIndicator size="large" color="#1e40af" />
+          <Text className="mt-2 text-gray-600">Loading tickets...</Text>
+        </View>
+      ) : filteredTickets.length > 0 ? (
         <FlatList
           data={filteredTickets}
           renderItem={renderTicketItem}
           keyExtractor={(item) => item.id}
           showsVerticalScrollIndicator={false}
           className="flex-1"
+          refreshing={loading}
+          onRefresh={fetchTickets}
         />
       ) : (
         <View className="flex-1 justify-center items-center">
-          <Text className="text-gray-500 text-center">No tickets found</Text>
+          <Text className="text-gray-500 text-center">
+            {searchQuery || activeFilter !== "all"
+              ? "No tickets match your search criteria"
+              : "No tickets found"}
+          </Text>
+          <TouchableOpacity
+            className="mt-4 bg-blue-600 px-4 py-2 rounded-lg"
+            onPress={() => router.push("/tickets/create")}
+          >
+            <Text className="text-white font-medium">Create Ticket</Text>
+          </TouchableOpacity>
         </View>
       )}
     </View>

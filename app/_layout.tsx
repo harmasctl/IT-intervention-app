@@ -43,6 +43,14 @@ function RootLayoutNav() {
       <Stack.Screen name="tickets/create" options={{ headerShown: false }} />
       <Stack.Screen name="inventory/index" options={{ headerShown: false }} />
       <Stack.Screen name="devices/index" options={{ headerShown: false }} />
+      <Stack.Screen
+        name="devices/bulk-import"
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="devices/categories"
+        options={{ headerShown: false }}
+      />
       <Stack.Screen name="profile/index" options={{ headerShown: false }} />
       <Stack.Screen name="auth/login" options={{ headerShown: false }} />
       <Stack.Screen name="auth/signup" options={{ headerShown: false }} />
@@ -54,6 +62,13 @@ function RootLayoutNav() {
         options={{ headerShown: false }}
       />
       <Stack.Screen name="reports/index" options={{ headerShown: false }} />
+      <Stack.Screen name="knowledge/index" options={{ headerShown: false }} />
+      <Stack.Screen name="knowledge/article" options={{ headerShown: false }} />
+      <Stack.Screen name="profile/edit" options={{ headerShown: false }} />
+      <Stack.Screen name="profile/settings" options={{ headerShown: false }} />
+      <Stack.Screen name="schedule/create" options={{ headerShown: false }} />
+      <Stack.Screen name="restaurants/index" options={{ headerShown: false }} />
+      <Stack.Screen name="admin/index" options={{ headerShown: false }} />
     </Stack>
   );
 }

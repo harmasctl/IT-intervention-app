@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -38,13 +38,35 @@ const DeviceMaintenanceScheduler = ({
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Mock technicians data - in a real app, this would come from your backend
-  const technicians = [
+  const [technicians, setTechnicians] = useState([
     { id: "1", name: "John Doe" },
     { id: "2", name: "Jane Smith" },
     { id: "3", name: "Mike Johnson" },
     { id: "4", name: "Sarah Williams" },
-  ];
+  ]);
+
+  // Fetch technicians from Supabase
+  useEffect(() => {
+    const fetchTechnicians = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("users")
+          .select("id, name")
+          .eq("role", "technician");
+
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+          setTechnicians(data);
+        }
+      } catch (error) {
+        console.error("Error fetching technicians:", error);
+        // Keep using the default technicians if there's an error
+      }
+    };
+
+    fetchTechnicians();
+  }, []);
 
   const handleDateChange = (event: any, selectedDate?: Date) => {
     setShowDatePicker(false);
@@ -85,6 +107,24 @@ const DeviceMaintenanceScheduler = ({
         });
 
       if (error) throw error;
+
+      // Also create a ticket for this maintenance
+      const { error: ticketError } = await supabase.from("tickets").insert({
+        title: `Scheduled maintenance for ${device.name}`,
+        device_id: device.id,
+        restaurant_id: device.restaurant_id,
+        priority: "medium",
+        status: "scheduled",
+        diagnostic_info: `Scheduled maintenance: ${notes}`,
+        assigned_to: technician,
+        created_at: new Date().toISOString(),
+        scheduled_date: scheduledDateTime.toISOString(),
+      });
+
+      if (ticketError) {
+        console.error("Error creating maintenance ticket:", ticketError);
+        // Continue anyway since the main schedule was created successfully
+      }
 
       Alert.alert("Success", "Maintenance scheduled successfully", [
         { text: "OK", onPress: onSuccess },

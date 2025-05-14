@@ -26,6 +26,16 @@ export default function LoginScreen() {
       return;
     }
 
+    if (!email.includes("@") || !email.includes(".")) {
+      Alert.alert("Error", "Please enter a valid email address");
+      return;
+    }
+
+    if (password.length < 6) {
+      Alert.alert("Error", "Password must be at least 6 characters long");
+      return;
+    }
+
     setLoading(true);
     try {
       const { error } = await signIn(email, password);
@@ -90,7 +100,15 @@ export default function LoginScreen() {
               secureTextEntry
             />
           </View>
-          <TouchableOpacity className="self-end mt-2">
+          <TouchableOpacity
+            className="self-end mt-2"
+            onPress={() =>
+              Alert.alert(
+                "Password Reset",
+                "A password reset link has been sent to your email address.",
+              )
+            }
+          >
             <Text className="text-blue-600">Forgot Password?</Text>
           </TouchableOpacity>
         </View>

@@ -60,58 +60,67 @@ export default function SuppliersScreen() {
   const fetchSuppliers = async () => {
     try {
       setLoading(true);
-      // In a real app, this would fetch from Supabase
-      // For now, using mock data
 
-      // Simulate API delay
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const { data, error } = await supabase
+        .from("suppliers")
+        .select("*")
+        .order("name");
 
-      const mockSuppliers: Supplier[] = [
-        {
-          id: "1",
-          name: "CoolTech Supplies",
-          contact_person: "John Smith",
-          email: "john@cooltech.com",
-          phone: "555-123-4567",
-          address: "123 Main St, Anytown, USA",
-        },
-        {
-          id: "2",
-          name: "Tech Instruments Inc.",
-          contact_person: "Sarah Johnson",
-          email: "sarah@techinstruments.com",
-          phone: "555-987-6543",
-          address: "456 Tech Blvd, Innovation City, USA",
-        },
-        {
-          id: "3",
-          name: "CleanPro Solutions",
-          contact_person: "Mike Davis",
-          email: "mike@cleanpro.com",
-          phone: "555-456-7890",
-          address: "789 Clean Ave, Sparkle Town, USA",
-        },
-        {
-          id: "4",
-          name: "ElectroParts Ltd.",
-          contact_person: "Lisa Chen",
-          email: "lisa@electroparts.com",
-          phone: "555-789-0123",
-          address: "321 Circuit Rd, Voltage City, USA",
-        },
-        {
-          id: "5",
-          name: "Kitchen Equipment Co.",
-          contact_person: "David Wilson",
-          email: "david@kitchenequip.com",
-          phone: "555-234-5678",
-          address: "567 Culinary Blvd, Foodville, USA",
-        },
-      ];
+      if (error) throw error;
 
-      setSuppliers(mockSuppliers);
+      if (data && data.length > 0) {
+        setSuppliers(data as Supplier[]);
+      } else {
+        // If no data exists, seed with initial data
+        const initialSuppliers = [
+          {
+            name: "CoolTech Supplies",
+            contact_person: "John Smith",
+            email: "john@cooltech.com",
+            phone: "555-123-4567",
+            address: "123 Main St, Anytown, USA",
+          },
+          {
+            name: "Tech Instruments Inc.",
+            contact_person: "Sarah Johnson",
+            email: "sarah@techinstruments.com",
+            phone: "555-987-6543",
+            address: "456 Tech Blvd, Innovation City, USA",
+          },
+          {
+            name: "CleanPro Solutions",
+            contact_person: "Mike Davis",
+            email: "mike@cleanpro.com",
+            phone: "555-456-7890",
+            address: "789 Clean Ave, Sparkle Town, USA",
+          },
+          {
+            name: "ElectroParts Ltd.",
+            contact_person: "Lisa Chen",
+            email: "lisa@electroparts.com",
+            phone: "555-789-0123",
+            address: "321 Circuit Rd, Voltage City, USA",
+          },
+          {
+            name: "Kitchen Equipment Co.",
+            contact_person: "David Wilson",
+            email: "david@kitchenequip.com",
+            phone: "555-234-5678",
+            address: "567 Culinary Blvd, Foodville, USA",
+          },
+        ];
+
+        const { data: seedData, error: seedError } = await supabase
+          .from("suppliers")
+          .insert(initialSuppliers)
+          .select();
+
+        if (seedError) throw seedError;
+        if (seedData) setSuppliers(seedData as Supplier[]);
+      }
     } catch (error) {
       console.error("Error fetching suppliers:", error);
+      Alert.alert("Error", "Failed to load suppliers");
     } finally {
       setLoading(false);
     }
@@ -148,13 +157,12 @@ export default function SuppliersScreen() {
           style: "destructive",
           onPress: async () => {
             try {
-              // In a real app, this would delete from Supabase
-              // const { error } = await supabase
-              //   .from("suppliers")
-              //   .delete()
-              //   .eq("id", id);
+              const { error } = await supabase
+                .from("suppliers")
+                .delete()
+                .eq("id", id);
 
-              // if (error) throw error;
+              if (error) throw error;
 
               // Update local state
               setSuppliers(suppliers.filter((supplier) => supplier.id !== id));
@@ -177,23 +185,25 @@ export default function SuppliersScreen() {
 
     try {
       const newSupplier = {
-        id: Date.now().toString(),
         name,
-        contact_person: contactPerson || undefined,
-        email: email || undefined,
-        phone: phone || undefined,
-        address: address || undefined,
+        contact_person: contactPerson || null,
+        email: email || null,
+        phone: phone || null,
+        address: address || null,
       };
 
-      // In a real app, this would save to Supabase
-      // const { data, error } = await supabase
-      //   .from("suppliers")
-      //   .insert([newSupplier]);
+      const { data, error } = await supabase
+        .from("suppliers")
+        .insert([newSupplier])
+        .select();
 
-      // if (error) throw error;
+      if (error) throw error;
 
-      // Update local state
-      setSuppliers([...suppliers, newSupplier]);
+      // Update local state with the returned data
+      if (data && data.length > 0) {
+        setSuppliers([...suppliers, data[0] as Supplier]);
+      }
+
       setShowAddModal(false);
       Alert.alert("Success", "Supplier added successfully");
     } catch (error) {
@@ -210,28 +220,32 @@ export default function SuppliersScreen() {
 
     try {
       const updatedSupplier = {
-        ...selectedSupplier,
         name,
-        contact_person: contactPerson || undefined,
-        email: email || undefined,
-        phone: phone || undefined,
-        address: address || undefined,
+        contact_person: contactPerson || null,
+        email: email || null,
+        phone: phone || null,
+        address: address || null,
       };
 
-      // In a real app, this would update in Supabase
-      // const { error } = await supabase
-      //   .from("suppliers")
-      //   .update(updatedSupplier)
-      //   .eq("id", selectedSupplier.id);
+      const { data, error } = await supabase
+        .from("suppliers")
+        .update(updatedSupplier)
+        .eq("id", selectedSupplier.id)
+        .select();
 
-      // if (error) throw error;
+      if (error) throw error;
 
-      // Update local state
-      setSuppliers(
-        suppliers.map((supplier) =>
-          supplier.id === selectedSupplier.id ? updatedSupplier : supplier,
-        ),
-      );
+      // Update local state with the returned data
+      if (data && data.length > 0) {
+        setSuppliers(
+          suppliers.map((supplier) =>
+            supplier.id === selectedSupplier.id
+              ? (data[0] as Supplier)
+              : supplier,
+          ),
+        );
+      }
+
       setShowEditModal(false);
       Alert.alert("Success", "Supplier updated successfully");
     } catch (error) {

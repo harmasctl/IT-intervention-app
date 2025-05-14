@@ -43,58 +43,38 @@ export default function ScheduleScreen() {
     try {
       setLoading(true);
 
-      // In a real app, this would fetch from Supabase
-      // For now, using mock data
-      const mockSchedules: Schedule[] = [
-        {
-          id: "1",
-          ticket_id: "101",
-          technician_id: user?.id || "unknown",
-          scheduled_date: new Date(Date.now() + 86400000).toISOString(), // tomorrow
-          status: "scheduled",
-          notes: "Bring replacement parts",
-          ticket_title: "Ice machine repair",
-          restaurant_name: "Burger Palace",
-          technician_name: "John Doe",
-        },
-        {
-          id: "2",
-          ticket_id: "102",
-          technician_id: user?.id || "unknown",
-          scheduled_date: new Date(Date.now() + 172800000).toISOString(), // day after tomorrow
-          status: "scheduled",
-          notes: "Regular maintenance",
-          ticket_title: "POS system update",
-          restaurant_name: "Pizza Heaven",
-          technician_name: "John Doe",
-        },
-        {
-          id: "3",
-          ticket_id: "103",
-          technician_id: "other-tech",
-          scheduled_date: new Date(Date.now() - 86400000).toISOString(), // yesterday
-          status: "completed",
-          notes: "Fixed and tested",
-          ticket_title: "Dishwasher repair",
-          restaurant_name: "Noodle House",
-          technician_name: "Jane Smith",
-        },
-        {
-          id: "4",
-          ticket_id: "104",
-          technician_id: user?.id || "unknown",
-          scheduled_date: new Date(Date.now() - 172800000).toISOString(), // 2 days ago
-          status: "cancelled",
-          notes: "Customer cancelled",
-          ticket_title: "Oven maintenance",
-          restaurant_name: "Bakery Delight",
-          technician_name: "John Doe",
-        },
-      ];
+      // Fetch real schedules from Supabase with joined data
+      const { data, error } = await supabase.from("schedules").select(`
+          *,
+          tickets:ticket_id(id, title),
+          technicians:technician_id(id, name),
+          restaurants:tickets!inner(restaurant_id(name))
+        `);
 
-      setSchedules(mockSchedules);
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        // Transform data to match the expected format
+        const formattedSchedules = data.map((schedule) => ({
+          id: schedule.id,
+          ticket_id: schedule.ticket_id,
+          technician_id: schedule.technician_id,
+          scheduled_date: schedule.scheduled_date,
+          status: schedule.status,
+          notes: schedule.notes,
+          ticket_title: schedule.tickets?.title || "Unknown Ticket",
+          restaurant_name: schedule.restaurants?.name || "Unknown Restaurant",
+          technician_name: schedule.technicians?.name || "Unknown Technician",
+        }));
+
+        setSchedules(formattedSchedules);
+      } else {
+        // If no schedules found, set empty array
+        setSchedules([]);
+      }
     } catch (error) {
       console.error("Error fetching schedules:", error);
+      setSchedules([]);
     } finally {
       setLoading(false);
     }
@@ -102,7 +82,7 @@ export default function ScheduleScreen() {
 
   const handleCreateSchedule = () => {
     // Navigate to create schedule screen
-    console.log("Create new schedule");
+    router.push("/schedule/create");
   };
 
   const handleSchedulePress = (scheduleId: string) => {
@@ -141,35 +121,48 @@ export default function ScheduleScreen() {
 
   const renderScheduleItem = ({ item }: { item: Schedule }) => (
     <TouchableOpacity
-      className="bg-white rounded-lg p-4 mb-3 shadow-sm border border-gray-100"
+      className="bg-white rounded-xl p-5 mb-4 shadow-md mx-1"
       onPress={() => handleSchedulePress(item.id)}
+      style={{ elevation: 2 }}
+      activeOpacity={0.7}
     >
-      <View className="flex-row justify-between items-start mb-2">
+      <View className="flex-row justify-between items-start mb-3">
         <Text className="font-bold text-lg text-gray-800">
           {item.ticket_title}
         </Text>
         <View
-          className={`px-2 py-1 rounded-full ${getStatusColor(item.status)}`}
+          className={`px-3 py-1.5 rounded-full ${getStatusColor(item.status)}`}
         >
           <Text className="text-xs font-medium capitalize">{item.status}</Text>
         </View>
       </View>
 
-      <Text className="text-gray-600 mb-3">{item.restaurant_name}</Text>
+      <View className="bg-gray-50 px-3 py-2 rounded-lg mb-3">
+        <Text className="text-gray-700 font-medium">
+          {item.restaurant_name}
+        </Text>
+      </View>
 
-      <View className="flex-row items-center mb-2">
-        <Calendar size={16} color="#4b5563" />
-        <Text className="ml-2 text-gray-700">
+      <View className="flex-row items-center mb-3 bg-blue-50 px-3 py-2 rounded-lg">
+        <Calendar size={16} color="#1e40af" />
+        <Text className="ml-2 text-blue-800 font-medium">
           {formatDate(item.scheduled_date)}
         </Text>
       </View>
 
       <View className="flex-row justify-between items-center">
-        <View className="flex-row items-center">
+        <View className="flex-row items-center bg-gray-100 px-3 py-2 rounded-lg">
           <User size={16} color="#4b5563" />
-          <Text className="ml-2 text-gray-700">{item.technician_name}</Text>
+          <Text className="ml-2 text-gray-700 font-medium">
+            {item.technician_name}
+          </Text>
         </View>
-        <ChevronRight size={16} color="#9ca3af" />
+        <TouchableOpacity
+          className="bg-blue-100 p-2 rounded-full"
+          onPress={() => handleSchedulePress(item.id)}
+        >
+          <ChevronRight size={16} color="#1e40af" />
+        </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
@@ -179,37 +172,42 @@ export default function ScheduleScreen() {
       <StatusBar style="auto" />
 
       {/* Header */}
-      <View className="flex-row justify-between items-center px-4 py-3 border-b border-gray-200">
-        <Text className="text-2xl font-bold text-blue-800">Schedule</Text>
+      <View className="flex-row justify-between items-center px-5 py-4 bg-gradient-to-r from-blue-700 to-indigo-800 shadow-lg">
+        <View className="flex-row items-center">
+          <Calendar size={24} color="white" className="mr-2" />
+          <Text className="text-2xl font-bold text-white">Schedule</Text>
+        </View>
         <TouchableOpacity
-          className="bg-blue-600 p-2 rounded-full"
+          className="bg-white p-2.5 rounded-full shadow-md"
           onPress={handleCreateSchedule}
         >
-          <Plus size={24} color="white" />
+          <Plus size={22} color="#1e40af" />
         </TouchableOpacity>
       </View>
 
       {/* Filter tabs */}
-      <View className="flex-row bg-white px-4 py-2 border-b border-gray-200">
-        {["all", "scheduled", "completed", "cancelled"].map((filter) => (
-          <TouchableOpacity
-            key={filter}
-            className={`mr-4 py-2 ${activeFilter === filter ? "border-b-2 border-blue-600" : ""}`}
-            onPress={() =>
-              setActiveFilter(
-                filter as "scheduled" | "completed" | "cancelled" | "all",
-              )
-            }
-          >
-            <Text
-              className={`${activeFilter === filter ? "text-blue-600 font-medium" : "text-gray-600"}`}
+      <View className="bg-white px-4 py-3 shadow-sm">
+        <View className="flex-row bg-gray-100 p-1 rounded-xl">
+          {["all", "scheduled", "completed", "cancelled"].map((filter) => (
+            <TouchableOpacity
+              key={filter}
+              className={`flex-1 py-2.5 rounded-lg ${activeFilter === filter ? "bg-white shadow-sm" : ""}`}
+              onPress={() =>
+                setActiveFilter(
+                  filter as "scheduled" | "completed" | "cancelled" | "all",
+                )
+              }
             >
-              {filter === "all"
-                ? "All"
-                : filter.charAt(0).toUpperCase() + filter.slice(1)}
-            </Text>
-          </TouchableOpacity>
-        ))}
+              <Text
+                className={`text-center ${activeFilter === filter ? "text-blue-700 font-medium" : "text-gray-600"}`}
+              >
+                {filter === "all"
+                  ? "All"
+                  : filter.charAt(0).toUpperCase() + filter.slice(1)}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
       </View>
 
       {/* Schedule list */}

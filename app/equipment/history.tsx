@@ -5,6 +5,7 @@ import {
   TouchableOpacity,
   FlatList,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
@@ -45,73 +46,49 @@ export default function EquipmentHistoryScreen() {
   const fetchMovements = async () => {
     try {
       setLoading(true);
-      // In a real app, this would fetch from Supabase
-      // For now, using mock data
 
-      // Simulate API delay
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Fetch movement records with equipment names
+      const { data, error } = await supabase
+        .from("equipment_movements")
+        .select(
+          `
+          id,
+          equipment_id,
+          movement_type,
+          quantity,
+          reason,
+          timestamp,
+          previous_stock,
+          new_stock,
+          equipment(name)
+        `,
+        )
+        .order("timestamp", { ascending: false });
 
-      const mockMovements: MovementRecord[] = [
-        {
-          id: "1",
-          equipment_id: "1",
-          equipment_name: "Ice Machine Compressor",
-          movement_type: "in",
-          quantity: 5,
-          reason: "New purchase",
-          timestamp: new Date(Date.now() - 86400000).toISOString(), // yesterday
-          previous_stock: 0,
-          new_stock: 5,
-        },
-        {
-          id: "2",
-          equipment_id: "2",
-          equipment_name: "Digital Thermometer",
-          movement_type: "in",
-          quantity: 15,
-          reason: "Restocking",
-          timestamp: new Date(Date.now() - 172800000).toISOString(), // 2 days ago
-          previous_stock: 0,
-          new_stock: 15,
-        },
-        {
-          id: "3",
-          equipment_id: "2",
-          equipment_name: "Digital Thermometer",
-          movement_type: "out",
-          quantity: 3,
-          reason: "Sent to Bella Italia restaurant",
-          timestamp: new Date(Date.now() - 86400000).toISOString(), // yesterday
-          previous_stock: 15,
-          new_stock: 12,
-        },
-        {
-          id: "4",
-          equipment_id: "3",
-          equipment_name: "Refrigerator Coil Cleaner",
-          movement_type: "in",
-          quantity: 24,
-          reason: "New purchase",
-          timestamp: new Date(Date.now() - 259200000).toISOString(), // 3 days ago
-          previous_stock: 0,
-          new_stock: 24,
-        },
-        {
-          id: "5",
-          equipment_id: "5",
-          equipment_name: "Fryer Heating Element",
-          movement_type: "out",
-          quantity: 2,
-          reason: "Sent to Burger Junction restaurant",
-          timestamp: new Date(Date.now() - 43200000).toISOString(), // 12 hours ago
-          previous_stock: 5,
-          new_stock: 3,
-        },
-      ];
+      if (error) throw error;
 
-      setMovements(mockMovements);
+      if (data && data.length > 0) {
+        // Transform the data to match our MovementRecord type
+        const formattedData: MovementRecord[] = data.map((item) => ({
+          id: item.id,
+          equipment_id: item.equipment_id,
+          equipment_name: item.equipment?.name || "Unknown Equipment",
+          movement_type: item.movement_type,
+          quantity: item.quantity,
+          reason: item.reason,
+          timestamp: item.timestamp,
+          previous_stock: item.previous_stock,
+          new_stock: item.new_stock,
+        }));
+
+        setMovements(formattedData);
+      } else {
+        // If no data exists, we'll just show an empty state
+        setMovements([]);
+      }
     } catch (error) {
       console.error("Error fetching movement history:", error);
+      Alert.alert("Error", "Failed to load movement history");
     } finally {
       setLoading(false);
     }

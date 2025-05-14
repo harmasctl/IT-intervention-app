@@ -30,18 +30,7 @@ interface InterventionHistory {
 
 interface TicketDetailProps {
   ticketId?: string;
-  title?: string;
-  device?: string;
-  diagnosticInfo?: string;
-  restaurant?: string;
-  priority?: "low" | "medium" | "high" | "critical";
-  status?: "new" | "assigned" | "in-progress" | "resolved";
-  assignedTo?: string;
-  createdAt?: string;
-  createdBy?: string;
-  photos?: string[];
-  interventionHistory?: InterventionHistory[];
-  technicians?: string[];
+  ticketData?: any;
   onAssign?: (technicianId: string) => void;
   onSchedule?: () => void;
   onUpdateStatus?: (status: string) => void;
@@ -49,36 +38,31 @@ interface TicketDetailProps {
 }
 
 const TicketDetail: React.FC<TicketDetailProps> = ({
-  ticketId = "TKT-2023-001",
-  title = "Ice machine not cooling properly",
-  device = "Hoshizaki Ice Machine KM-660MAJ",
-  diagnosticInfo = "Unit is running but not producing ice. Temperature readings are above normal range.",
-  restaurant = "Seaside Grill",
-  priority = "high",
-  status = "assigned",
-  assignedTo = "John Doe",
-  createdAt = "2023-10-15 09:30 AM",
-  createdBy = "Sarah Johnson",
-  technicians = ["John Doe", "Jane Smith", "Mike Wilson", "Lisa Brown"],
-
-  photos = [
-    "https://images.unsplash.com/photo-1585704032915-c3400ca199e7?w=400&q=80",
-    "https://images.unsplash.com/photo-1563203369-26f2e4a5ccf7?w=400&q=80",
-  ],
-  interventionHistory = [
-    {
-      date: "2023-10-16 02:30 PM",
-      technician: "John Doe",
-      actions: "Cleaned condenser coils, replaced water filter",
-      status: "completed",
-      notes: "Unit was heavily soiled, recommend monthly cleaning schedule",
-    },
-  ],
+  ticketId = "",
+  ticketData,
   onAssign = () => {},
   onSchedule = () => {},
   onUpdateStatus = () => {},
   onAddResolution = () => {},
 }) => {
+  // Extract data from ticketData or use defaults
+  const title = ticketData?.title || "No title";
+  const device = ticketData?.devices?.name || "Unknown device";
+  const diagnosticInfo =
+    ticketData?.diagnostic_info || "No diagnostic information";
+  const restaurant = ticketData?.restaurants?.name || "Unknown restaurant";
+  const priority = ticketData?.priority || "medium";
+  const status = ticketData?.status || "new";
+  const assignedTo = ticketData?.assigned_user?.name || "Unassigned";
+  const createdAt = ticketData?.created_at
+    ? new Date(ticketData.created_at).toLocaleString()
+    : "Unknown date";
+  const createdBy = ticketData?.created_by || "Unknown";
+
+  // Default values for arrays
+  const photos = ticketData?.photos || [];
+  const technicians = ["John Doe", "Jane Smith", "Mike Wilson", "Lisa Brown"];
+  const interventionHistory = ticketData?.intervention_history || [];
   const [showHistory, setShowHistory] = useState(true);
   const [resolutionNote, setResolutionNote] = useState("");
   const [showStatusOptions, setShowStatusOptions] = useState(false);

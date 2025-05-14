@@ -1,7 +1,27 @@
 import React, { createContext, useState, useEffect, useContext } from "react";
-import { supabase } from "../lib/supabase";
+import { createClient } from "@supabase/supabase-js";
+import { Database } from "../lib/database.types";
 import { Session, User } from "@supabase/supabase-js";
-import { View, Text, ActivityIndicator } from "react-native";
+import { View, Text, ActivityIndicator, Alert } from "react-native";
+
+// Create a direct supabase client for AuthProvider to avoid circular dependencies
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || "";
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || "";
+
+// Log environment variables status for debugging
+if (!process.env.EXPO_PUBLIC_SUPABASE_URL) {
+  console.error(
+    "EXPO_PUBLIC_SUPABASE_URL is not defined in environment variables",
+  );
+}
+
+if (!process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY) {
+  console.error(
+    "EXPO_PUBLIC_SUPABASE_ANON_KEY is not defined in environment variables",
+  );
+}
+
+const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
 
 type AuthContextType = {
   session: Session | null;
@@ -86,10 +106,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             name: userData.name,
             role: userData.role,
             avatar_url: userData.avatar_url || null,
+            created_at: new Date().toISOString(),
           },
         ]);
 
-        if (profileError) return { error: profileError };
+        if (profileError) {
+          console.error("Error creating user profile:", profileError);
+          return { error: profileError };
+        }
       }
 
       return { error: null };
@@ -104,7 +128,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.error("Sign out error:", error);
+      Alert.alert("Error", "Failed to sign out. Please try again.");
+    }
   };
 
   const value = {

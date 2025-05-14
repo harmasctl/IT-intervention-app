@@ -207,6 +207,117 @@ export interface Database {
           created_at?: string;
         };
       };
+      equipment: {
+        Row: {
+          id: string;
+          name: string;
+          type: string;
+          stock_level: number;
+          supplier: string | null;
+          warehouse_location: string | null;
+          notes: string | null;
+          image_url: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          type: string;
+          stock_level: number;
+          supplier?: string | null;
+          warehouse_location?: string | null;
+          notes?: string | null;
+          image_url?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          type?: string;
+          stock_level?: number;
+          supplier?: string | null;
+          warehouse_location?: string | null;
+          notes?: string | null;
+          image_url?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      equipment_movements: {
+        Row: {
+          id: string;
+          equipment_id: string;
+          movement_type: string;
+          quantity: number;
+          reason: string;
+          destination: string | null;
+          notes: string | null;
+          previous_stock: number;
+          new_stock: number;
+          timestamp: string;
+          created_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          equipment_id: string;
+          movement_type: string;
+          quantity: number;
+          reason: string;
+          destination?: string | null;
+          notes?: string | null;
+          previous_stock: number;
+          new_stock: number;
+          timestamp?: string;
+          created_by?: string | null;
+        };
+        Update: {
+          id?: string;
+          equipment_id?: string;
+          movement_type?: string;
+          quantity?: number;
+          reason?: string;
+          destination?: string | null;
+          notes?: string | null;
+          previous_stock?: number;
+          new_stock?: number;
+          timestamp?: string;
+          created_by?: string | null;
+        };
+      };
+      suppliers: {
+        Row: {
+          id: string;
+          name: string;
+          contact_person: string | null;
+          email: string | null;
+          phone: string | null;
+          address: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          contact_person?: string | null;
+          email?: string | null;
+          phone?: string | null;
+          address?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          contact_person?: string | null;
+          email?: string | null;
+          phone?: string | null;
+          address?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
       equipment_inventory: {
         Row: {
           id: string;
@@ -270,7 +381,19 @@ export interface Database {
       [_ in never]: never;
     };
     Functions: {
-      [_ in never]: never;
+      record_equipment_movement: {
+        Args: {
+          p_equipment_id: string;
+          p_movement_type: string;
+          p_quantity: number;
+          p_reason: string;
+          p_destination: string | null;
+          p_notes: string | null;
+          p_previous_stock: number;
+          p_new_stock: number;
+        };
+        Returns: Json;
+      };
     };
     Enums: {
       [_ in never]: never;

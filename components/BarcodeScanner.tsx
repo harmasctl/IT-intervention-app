@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from "react-native";
 import { Camera } from "expo-camera";
 import { BarCodeScanner } from "expo-barcode-scanner";
 import { X, Check } from "lucide-react-native";
+import * as Haptics from "expo-haptics";
 
 interface BarcodeScannerProps {
   onScan: (data: string) => void;
@@ -35,16 +36,52 @@ const BarcodeScanner = ({
     type: string;
     data: string;
   }) => {
+    // Provide haptic feedback when barcode is scanned
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+    // Log the scan type and data
+    console.log(`Barcode with type ${type} and data ${data} has been scanned!`);
+
+    // Validate the scanned data based on mode
+    let isValid = true;
+
+    if (mode === "serial") {
+      // Serial numbers typically have specific formats - this is a simple example
+      isValid = data.length >= 6;
+    } else if (mode === "equipment") {
+      // Equipment barcodes might start with specific prefixes
+      isValid = data.startsWith("EQ-") || data.length >= 8;
+    } else if (mode === "stock") {
+      // Stock items might have numeric codes
+      isValid = !isNaN(Number(data)) || data.startsWith("STK-");
+    }
+
+    if (!isValid) {
+      Alert.alert(
+        "Invalid Barcode",
+        `This doesn't appear to be a valid ${mode} barcode. Please try again.`,
+        [{ text: "OK", onPress: () => setScanned(false) }],
+      );
+      return;
+    }
+
     setScanned(true);
     setScannedData(data);
   };
 
   const handleConfirm = () => {
+    // Provide haptic feedback when confirming
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    // Pass the scanned data back to the parent component
     onScan(scannedData);
     onClose();
   };
 
   const handleScanAgain = () => {
+    // Provide haptic feedback when scanning again
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
     setScanned(false);
     setScannedData("");
   };

@@ -1,11 +1,12 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
   TextInput,
   ScrollView,
   TouchableOpacity,
-  Image,
+  Alert,
+  ActivityIndicator,
 } from "react-native";
 import {
   Camera,
@@ -15,6 +16,9 @@ import {
   Check,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
+import { supabase } from "../lib/supabase";
+import { Image } from "expo-image";
+import { Database } from "../lib/database.types";
 
 interface DeviceOption {
   id: string;
@@ -43,21 +47,6 @@ interface TicketData {
   jiraTicketId: string;
 }
 
-const MOCK_DEVICES: DeviceOption[] = [
-  { id: "1", name: "Ice Cream Machine", type: "Kitchen Equipment" },
-  { id: "2", name: "POS Terminal", type: "Electronics" },
-  { id: "3", name: "Refrigerator #2", type: "Kitchen Equipment" },
-  { id: "4", name: "Digital Menu Board", type: "Electronics" },
-  { id: "5", name: "Dishwasher", type: "Kitchen Equipment" },
-];
-
-const MOCK_RESTAURANTS: RestaurantOption[] = [
-  { id: "1", name: "Downtown Grill", location: "123 Main St, City" },
-  { id: "2", name: "Seaside Bistro", location: "456 Ocean Ave, Beach Town" },
-  { id: "3", name: "Mountain View Cafe", location: "789 Summit Rd, Highland" },
-  { id: "4", name: "City Center Diner", location: "101 Plaza Square, Metro" },
-];
-
 const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
   const [currentStep, setCurrentStep] = useState(0);
   const [ticketData, setTicketData] = useState<TicketData>({
@@ -72,6 +61,68 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
 
   const [deviceSearchQuery, setDeviceSearchQuery] = useState("");
   const [restaurantSearchQuery, setRestaurantSearchQuery] = useState("");
+  const [devices, setDevices] = useState<DeviceOption[]>([]);
+  const [restaurants, setRestaurants] = useState<RestaurantOption[]>([]);
+  const [loading, setLoading] = useState({
+    devices: false,
+    restaurants: false,
+  });
+
+  // Fetch devices and restaurants from Supabase
+  useEffect(() => {
+    fetchDevices();
+    fetchRestaurants();
+  }, []);
+
+  const fetchDevices = async () => {
+    try {
+      setLoading((prev) => ({ ...prev, devices: true }));
+      const { data, error } = await supabase
+        .from("devices")
+        .select("id, name, type, serial_number, status");
+
+      if (error) throw error;
+
+      if (data) {
+        const formattedDevices = data.map((device) => ({
+          id: device.id,
+          name: device.name,
+          type: device.type || "Unknown Type",
+        }));
+        setDevices(formattedDevices);
+      }
+    } catch (error) {
+      console.error("Error fetching devices:", error);
+      Alert.alert("Error", "Failed to load devices. Please try again.");
+    } finally {
+      setLoading((prev) => ({ ...prev, devices: false }));
+    }
+  };
+
+  const fetchRestaurants = async () => {
+    try {
+      setLoading((prev) => ({ ...prev, restaurants: true }));
+      const { data, error } = await supabase
+        .from("restaurants")
+        .select("id, name, location");
+
+      if (error) throw error;
+
+      if (data) {
+        const formattedRestaurants = data.map((restaurant) => ({
+          id: restaurant.id,
+          name: restaurant.name,
+          location: restaurant.location || "Unknown Location",
+        }));
+        setRestaurants(formattedRestaurants);
+      }
+    } catch (error) {
+      console.error("Error fetching restaurants:", error);
+      Alert.alert("Error", "Failed to load restaurants. Please try again.");
+    } finally {
+      setLoading((prev) => ({ ...prev, restaurants: false }));
+    }
+  };
 
   const handleNext = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -86,17 +137,6 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
   const handleSubmit = async () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-    // In a real implementation, we would save to Supabase here
-    // const { data, error } = await supabase.from('tickets').insert([{
-    //   title: ticketData.title,
-    //   priority: ticketData.priority,
-    //   restaurant_id: ticketData.restaurant?.id,
-    //   device_id: ticketData.device?.id,
-    //   diagnostic_info: ticketData.diagnosticInfo,
-    //   photos: ticketData.photos,
-    //   jira_ticket_id: ticketData.jiraTicketId,
-    // }]);
-
     if (onSubmit) {
       onSubmit(ticketData);
     }
@@ -106,6 +146,7 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
     setTicketData((prev) => ({ ...prev, [field]: value }));
   };
 
+  // Function to handle photo capture (in a real app, this would use the camera)
   const addMockPhoto = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const newPhoto = `https://images.unsplash.com/photo-${Math.floor(Math.random() * 1000)}?w=300&q=80`;
@@ -118,13 +159,13 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
     updateTicketData("photos", updatedPhotos);
   };
 
-  const filteredDevices = MOCK_DEVICES.filter(
+  const filteredDevices = devices.filter(
     (device) =>
       device.name.toLowerCase().includes(deviceSearchQuery.toLowerCase()) ||
       device.type.toLowerCase().includes(deviceSearchQuery.toLowerCase()),
   );
 
-  const filteredRestaurants = MOCK_RESTAURANTS.filter(
+  const filteredRestaurants = restaurants.filter(
     (restaurant) =>
       restaurant.name
         .toLowerCase()
@@ -185,32 +226,41 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
               onChangeText={setDeviceSearchQuery}
             />
 
-            <ScrollView className="max-h-64 mb-4">
-              {filteredDevices.map((device) => (
-                <TouchableOpacity
-                  key={device.id}
-                  className={`p-3 border-b border-gray-200 flex-row justify-between items-center ${ticketData.device?.id === device.id ? "bg-blue-50" : ""} animate-fade-in`}
-                  onPress={() => updateTicketData("device", device)}
-                >
-                  <View>
-                    <Text className="font-semibold">{device.name}</Text>
-                    <Text className="text-gray-500 text-sm">{device.type}</Text>
+            {loading.devices ? (
+              <View className="items-center justify-center py-8">
+                <ActivityIndicator size="large" color="#3b82f6" />
+                <Text className="mt-2 text-gray-500">Loading devices...</Text>
+              </View>
+            ) : (
+              <ScrollView className="max-h-64 mb-4">
+                {filteredDevices.map((device) => (
+                  <TouchableOpacity
+                    key={device.id}
+                    className={`p-3 border-b border-gray-200 flex-row justify-between items-center ${ticketData.device?.id === device.id ? "bg-blue-50" : ""} animate-fade-in`}
+                    onPress={() => updateTicketData("device", device)}
+                  >
+                    <View>
+                      <Text className="font-semibold">{device.name}</Text>
+                      <Text className="text-gray-500 text-sm">
+                        {device.type}
+                      </Text>
+                    </View>
+                    {ticketData.device?.id === device.id && (
+                      <Check
+                        size={20}
+                        color="#3b82f6"
+                        className="animate-bounce"
+                      />
+                    )}
+                  </TouchableOpacity>
+                ))}
+                {filteredDevices.length === 0 && (
+                  <View className="py-4 items-center">
+                    <Text className="text-gray-500">No devices found</Text>
                   </View>
-                  {ticketData.device?.id === device.id && (
-                    <Check
-                      size={20}
-                      color="#3b82f6"
-                      className="animate-bounce"
-                    />
-                  )}
-                </TouchableOpacity>
-              ))}
-              {filteredDevices.length === 0 && (
-                <View className="py-4 items-center">
-                  <Text className="text-gray-500">No devices found</Text>
-                </View>
-              )}
-            </ScrollView>
+                )}
+              </ScrollView>
+            )}
 
             <View className="flex-row justify-between">
               <TouchableOpacity
@@ -290,34 +340,43 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
               onChangeText={setRestaurantSearchQuery}
             />
 
-            <ScrollView className="max-h-64 mb-4">
-              {filteredRestaurants.map((restaurant) => (
-                <TouchableOpacity
-                  key={restaurant.id}
-                  className={`p-3 border-b border-gray-200 flex-row justify-between items-center ${ticketData.restaurant?.id === restaurant.id ? "bg-blue-50" : ""} animate-fade-in`}
-                  onPress={() => updateTicketData("restaurant", restaurant)}
-                >
-                  <View>
-                    <Text className="font-semibold">{restaurant.name}</Text>
-                    <Text className="text-gray-500 text-sm">
-                      {restaurant.location}
-                    </Text>
+            {loading.restaurants ? (
+              <View className="items-center justify-center py-8">
+                <ActivityIndicator size="large" color="#3b82f6" />
+                <Text className="mt-2 text-gray-500">
+                  Loading restaurants...
+                </Text>
+              </View>
+            ) : (
+              <ScrollView className="max-h-64 mb-4">
+                {filteredRestaurants.map((restaurant) => (
+                  <TouchableOpacity
+                    key={restaurant.id}
+                    className={`p-3 border-b border-gray-200 flex-row justify-between items-center ${ticketData.restaurant?.id === restaurant.id ? "bg-blue-50" : ""} animate-fade-in`}
+                    onPress={() => updateTicketData("restaurant", restaurant)}
+                  >
+                    <View>
+                      <Text className="font-semibold">{restaurant.name}</Text>
+                      <Text className="text-gray-500 text-sm">
+                        {restaurant.location}
+                      </Text>
+                    </View>
+                    {ticketData.restaurant?.id === restaurant.id && (
+                      <Check
+                        size={20}
+                        color="#3b82f6"
+                        className="animate-bounce"
+                      />
+                    )}
+                  </TouchableOpacity>
+                ))}
+                {filteredRestaurants.length === 0 && (
+                  <View className="py-4 items-center">
+                    <Text className="text-gray-500">No restaurants found</Text>
                   </View>
-                  {ticketData.restaurant?.id === restaurant.id && (
-                    <Check
-                      size={20}
-                      color="#3b82f6"
-                      className="animate-bounce"
-                    />
-                  )}
-                </TouchableOpacity>
-              ))}
-              {filteredRestaurants.length === 0 && (
-                <View className="py-4 items-center">
-                  <Text className="text-gray-500">No restaurants found</Text>
-                </View>
-              )}
-            </ScrollView>
+                )}
+              </ScrollView>
+            )}
 
             <View className="flex-row justify-between">
               <TouchableOpacity
