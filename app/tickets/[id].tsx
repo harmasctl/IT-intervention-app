@@ -1,25 +1,46 @@
 import React, { useState, useEffect } from "react";
 import {
   View,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
   Text,
+  TouchableOpacity,
+  ScrollView,
+  ActivityIndicator,
+  Alert,
+  Image,
+  Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import { useRouter, useLocalSearchParams } from "expo-router";
-import { ArrowLeft } from "lucide-react-native";
-import TicketDetail from "../../components/TicketDetail";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import {
+  ArrowLeft,
+  Clock,
+  CheckCircle,
+  AlertCircle,
+  MessageSquare,
+  Smartphone,
+  Building2,
+  User,
+  Calendar,
+  Image as ImageIcon,
+  Tool,
+  FileText,
+} from "lucide-react-native";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../components/AuthProvider";
+import TicketStatusWorkflow from "../../components/TicketStatusWorkflow";
+import TicketAssignment from "../../components/TicketAssignment";
+import { useOffline } from "../../components/OfflineManager";
 
 export default function TicketDetailScreen() {
+  const { id } = useLocalSearchParams();
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
+  const { isOnline, saveOfflineAction } = useOffline();
+  const [ticket, setTicket] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [ticketData, setTicketData] = useState<any>(null);
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [isAssignee, setIsAssignee] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -27,174 +48,402 @@ export default function TicketDetailScreen() {
     }
   }, [id]);
 
+  useEffect(() => {
+    if (ticket && user) {
+      setIsAssignee(ticket.assignee_id === user.id);
+    }
+  }, [ticket, user]);
+
   const fetchTicketDetails = async () => {
     try {
       setLoading(true);
-
-      // Fetch ticket details from Supabase
       const { data, error } = await supabase
         .from("tickets")
-        .select(
-          `
-          *,
-          restaurants:restaurant_id(name),
-          devices:device_id(name),
-          assigned_user:assigned_to(name)
-        `,
-        )
+        .select("*, devices(*), restaurants(*)")
         .eq("id", id)
         .single();
 
       if (error) throw error;
 
       if (data) {
-        setTicketData(data);
+        setTicket(data);
       }
     } catch (error) {
       console.error("Error fetching ticket details:", error);
-      // For demo purposes, we'll use mock data if the fetch fails
-      setTicketData({
-        id,
-        title: "Ice machine not cooling properly",
-        priority: "high",
-        status: "assigned",
-        diagnostic_info:
-          "Unit is running but not producing ice. Temperature readings are above normal range.",
-        restaurants: { name: "Seaside Grill" },
-        devices: { name: "Hoshizaki Ice Machine KM-660MAJ" },
-        assigned_user: { name: "John Doe" },
-        created_at: new Date().toISOString(),
-        created_by: user?.id,
-      });
+      Alert.alert("Error", "Failed to load ticket details");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleAssign = async (technicianId: string) => {
+  const handleAssign = async (technicianId: string, technicianName: string) => {
     try {
-      // Update the ticket in Supabase
-      const { error } = await supabase
-        .from("tickets")
-        .update({
-          assigned_to: technicianId,
+      const now = new Date().toISOString();
+      const updates = {
+        assignee_id: technicianId,
+        assignee_name: technicianName,
+        assigned_at: now,
+        status: "assigned",
+        updated_at: now,
+      };
+
+      if (isOnline) {
+        const { error } = await supabase
+          .from("tickets")
+          .update(updates)
+          .eq("id", id);
+
+        if (error) throw error;
+
+        // Record in ticket history
+        await supabase.from("ticket_history").insert([
+          {
+            ticket_id: id,
+            status: "assigned",
+            timestamp: now,
+            notes: `Assigned to ${technicianName}`,
+            user_id: user?.id,
+          },
+        ]);
+
+        // Create notification
+        await supabase.from("notifications").insert([
+          {
+            title: "Ticket Assigned",
+            message: `Ticket #${id} has been assigned to ${technicianName}`,
+            type: "info",
+            related_id: id,
+            related_type: "ticket",
+            is_read: false,
+            created_at: now,
+          },
+        ]);
+      } else {
+        // Save for offline sync
+        await saveOfflineAction("tickets", "update", { id, ...updates });
+        await saveOfflineAction("ticket_history", "insert", {
+          ticket_id: id,
           status: "assigned",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", id);
+          timestamp: now,
+          notes: `Assigned to ${technicianName}`,
+          user_id: user?.id,
+        });
+      }
 
-      if (error) throw error;
+      // Update local state
+      setTicket({
+        ...ticket,
+        ...updates,
+      });
 
-      Alert.alert("Success", `Ticket assigned to ${technicianId}`);
-      // In a real app, we would refresh the ticket data here
-    } catch (error: any) {
+      setShowAssignModal(false);
+    } catch (error) {
       console.error("Error assigning ticket:", error);
-      Alert.alert("Error", error.message || "Failed to assign ticket");
+      Alert.alert("Error", "Failed to assign ticket");
     }
   };
 
-  const handleSchedule = () => {
-    // Navigate to schedule creation screen with pre-filled ticket ID
-    router.push({
-      pathname: "/schedule/create",
-      params: { ticketId: id },
+  const handleStatusChange = (newStatus: string) => {
+    // Update local state immediately for better UX
+    setTicket({
+      ...ticket,
+      status: newStatus,
+      updated_at: new Date().toISOString(),
     });
   };
 
-  const handleUpdateStatus = async (status: string) => {
-    try {
-      // Update the ticket status in Supabase
-      const { error } = await supabase
-        .from("tickets")
-        .update({
-          status,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", id);
-
-      if (error) throw error;
-
-      Alert.alert("Success", `Ticket status updated to ${status}`);
-      // In a real app, we would refresh the ticket data here
-    } catch (error: any) {
-      console.error("Error updating ticket status:", error);
-      Alert.alert("Error", error.message || "Failed to update ticket status");
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case "high":
+        return "bg-red-100 text-red-800";
+      case "medium":
+        return "bg-amber-100 text-amber-800";
+      case "low":
+        return "bg-green-100 text-green-800";
+      default:
+        return "bg-gray-100 text-gray-800";
     }
   };
 
-  const handleAddResolution = async (resolution: string) => {
-    if (!resolution.trim()) {
-      Alert.alert("Error", "Resolution cannot be empty");
-      return;
-    }
-
-    try {
-      // Add a comment to the ticket
-      const { error: commentError } = await supabase
-        .from("ticket_comments")
-        .insert({
-          ticket_id: id,
-          user_id: user?.id,
-          comment: resolution,
-        });
-
-      if (commentError) throw commentError;
-
-      // Update the ticket status to resolved
-      const { error: statusError } = await supabase
-        .from("tickets")
-        .update({
-          status: "resolved",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", id);
-
-      if (statusError) throw statusError;
-
-      Alert.alert("Success", "Resolution added and ticket marked as resolved");
-      // In a real app, we would refresh the ticket data here
-    } catch (error: any) {
-      console.error("Error adding resolution:", error);
-      Alert.alert("Error", error.message || "Failed to add resolution");
-    }
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return "Not set";
+    const date = new Date(dateString);
+    return date.toLocaleString();
   };
+
+  if (loading) {
+    return (
+      <SafeAreaView className="flex-1 bg-white">
+        <StatusBar style="auto" />
+        <View className="flex-1 justify-center items-center">
+          <ActivityIndicator size="large" color="#1e40af" />
+          <Text className="mt-4 text-gray-500">Loading ticket details...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!ticket) {
+    return (
+      <SafeAreaView className="flex-1 bg-white">
+        <StatusBar style="auto" />
+        <View className="flex-1 justify-center items-center p-4">
+          <AlertCircle size={48} color="#ef4444" />
+          <Text className="mt-4 text-gray-800 text-lg font-bold">
+            Ticket Not Found
+          </Text>
+          <Text className="mt-2 text-gray-500 text-center">
+            The ticket you're looking for doesn't exist or has been deleted.
+          </Text>
+          <TouchableOpacity
+            className="mt-6 bg-blue-600 px-4 py-2 rounded-lg"
+            onPress={() => router.back()}
+          >
+            <Text className="text-white font-medium">Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-white">
       <StatusBar style="auto" />
-
-      {/* Header */}
-      <View className="flex-row items-center px-4 py-3 border-b border-gray-200">
+      <View className="flex-row items-center p-4 border-b border-gray-200">
         <TouchableOpacity onPress={() => router.back()} className="mr-4">
           <ArrowLeft size={24} color="#1e40af" />
         </TouchableOpacity>
+        <View className="flex-1">
+          <Text className="text-xl font-bold text-gray-800" numberOfLines={1}>
+            {ticket.title}
+          </Text>
+          <Text className="text-gray-500">Ticket #{ticket.id.slice(0, 8)}</Text>
+        </View>
       </View>
 
-      {loading ? (
-        <View className="flex-1 justify-center items-center">
-          <ActivityIndicator size="large" color="#1e40af" />
-          <Text className="mt-2 text-gray-600">Loading ticket details...</Text>
+      <ScrollView className="flex-1 p-4">
+        <View className="mb-6">
+          <Text className="text-gray-700 font-medium mb-2">Description</Text>
+          <Text className="text-gray-800">{ticket.description}</Text>
         </View>
-      ) : ticketData ? (
-        <TicketDetail
-          ticketId={id}
-          ticketData={ticketData}
-          onAssign={handleAssign}
-          onSchedule={handleSchedule}
-          onUpdateStatus={handleUpdateStatus}
-          onAddResolution={handleAddResolution}
+
+        <TicketStatusWorkflow
+          ticketId={ticket.id}
+          currentStatus={ticket.status}
+          onStatusChange={handleStatusChange}
+          assigneeId={ticket.assignee_id}
+          isAssignee={isAssignee}
         />
-      ) : (
-        <View className="flex-1 justify-center items-center p-4">
-          <Text className="text-gray-500 text-center">Ticket not found</Text>
-          <TouchableOpacity
-            className="mt-4 bg-blue-600 px-4 py-2 rounded-lg"
-            onPress={() => router.replace("/tickets")}
+
+        <View className="mb-4">
+          <Text className="text-gray-700 font-medium mb-2">Priority</Text>
+          <View
+            className={`px-3 py-1.5 self-start rounded-full ${getPriorityColor(
+              ticket.priority,
+            )}`}
           >
-            <Text className="text-white font-medium">Back to Tickets</Text>
-          </TouchableOpacity>
+            <Text className="font-medium capitalize">{ticket.priority}</Text>
+          </View>
         </View>
-      )}
+
+        <View className="mb-4">
+          <Text className="text-gray-700 font-medium mb-2">Assigned To</Text>
+          {ticket.assignee_name ? (
+            <View className="flex-row items-center">
+              <View className="bg-blue-100 w-8 h-8 rounded-full items-center justify-center mr-2">
+                <User size={16} color="#1e40af" />
+              </View>
+              <View>
+                <Text className="font-medium text-gray-800">
+                  {ticket.assignee_name}
+                </Text>
+                <Text className="text-gray-500 text-xs">
+                  Assigned {formatDate(ticket.assigned_at)}
+                </Text>
+              </View>
+            </View>
+          ) : (
+            <View className="flex-row items-center">
+              <TouchableOpacity
+                className="bg-blue-600 px-3 py-1.5 rounded-lg flex-row items-center"
+                onPress={() => setShowAssignModal(true)}
+              >
+                <User size={16} color="white" />
+                <Text className="text-white font-medium ml-1">
+                  Assign Ticket
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+
+        <View className="mb-4">
+          <Text className="text-gray-700 font-medium mb-2">Device</Text>
+          {ticket.devices ? (
+            <View className="flex-row items-center bg-gray-50 p-3 rounded-lg">
+              <View className="bg-blue-100 w-10 h-10 rounded-full items-center justify-center mr-3">
+                <Smartphone size={20} color="#1e40af" />
+              </View>
+              <View className="flex-1">
+                <Text className="font-medium text-gray-800">
+                  {ticket.devices.name}
+                </Text>
+                <Text className="text-gray-500 text-sm">
+                  {ticket.devices.type} •{" "}
+                  {ticket.devices.model || "Unknown model"}
+                </Text>
+                {ticket.devices.serial_number && (
+                  <Text className="text-gray-500 text-xs">
+                    S/N: {ticket.devices.serial_number}
+                  </Text>
+                )}
+              </View>
+              <TouchableOpacity
+                onPress={() => router.push(`/devices/${ticket.device_id}`)}
+              >
+                <Text className="text-blue-600">View</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <Text className="text-gray-500">No device associated</Text>
+          )}
+        </View>
+
+        <View className="mb-4">
+          <Text className="text-gray-700 font-medium mb-2">Location</Text>
+          {ticket.restaurants ? (
+            <View className="flex-row items-center bg-gray-50 p-3 rounded-lg">
+              <View className="bg-blue-100 w-10 h-10 rounded-full items-center justify-center mr-3">
+                <Building2 size={20} color="#1e40af" />
+              </View>
+              <View className="flex-1">
+                <Text className="font-medium text-gray-800">
+                  {ticket.restaurants.name}
+                </Text>
+                <Text className="text-gray-500 text-sm">
+                  {ticket.restaurants.address || "No address provided"}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() =>
+                  router.push(`/restaurants/${ticket.restaurant_id}`)
+                }
+              >
+                <Text className="text-blue-600">View</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <Text className="text-gray-500">No location associated</Text>
+          )}
+        </View>
+
+        <View className="mb-4">
+          <Text className="text-gray-700 font-medium mb-2">Timeline</Text>
+          <View className="bg-gray-50 p-3 rounded-lg">
+            <View className="flex-row items-center mb-3">
+              <View className="bg-blue-100 w-8 h-8 rounded-full items-center justify-center mr-2">
+                <FileText size={16} color="#1e40af" />
+              </View>
+              <View className="flex-1">
+                <Text className="font-medium text-gray-800">
+                  Ticket Created
+                </Text>
+                <Text className="text-gray-500 text-xs">
+                  {formatDate(ticket.created_at)}
+                </Text>
+              </View>
+            </View>
+
+            {ticket.assigned_at && (
+              <View className="flex-row items-center mb-3">
+                <View className="bg-purple-100 w-8 h-8 rounded-full items-center justify-center mr-2">
+                  <User size={16} color="#7e22ce" />
+                </View>
+                <View className="flex-1">
+                  <Text className="font-medium text-gray-800">
+                    Assigned to {ticket.assignee_name}
+                  </Text>
+                  <Text className="text-gray-500 text-xs">
+                    {formatDate(ticket.assigned_at)}
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {ticket.first_response_at && (
+              <View className="flex-row items-center mb-3">
+                <View className="bg-amber-100 w-8 h-8 rounded-full items-center justify-center mr-2">
+                  <MessageSquare size={16} color="#b45309" />
+                </View>
+                <View className="flex-1">
+                  <Text className="font-medium text-gray-800">
+                    First Response
+                  </Text>
+                  <Text className="text-gray-500 text-xs">
+                    {formatDate(ticket.first_response_at)}
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {ticket.resolved_at && (
+              <View className="flex-row items-center">
+                <View className="bg-green-100 w-8 h-8 rounded-full items-center justify-center mr-2">
+                  <CheckCircle size={16} color="#15803d" />
+                </View>
+                <View className="flex-1">
+                  <Text className="font-medium text-gray-800">
+                    Ticket Resolved
+                  </Text>
+                  <Text className="text-gray-500 text-xs">
+                    {formatDate(ticket.resolved_at)}
+                  </Text>
+                </View>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {ticket.photos && ticket.photos.length > 0 && (
+          <View className="mb-4">
+            <Text className="text-gray-700 font-medium mb-2">Photos</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {ticket.photos.map((photo: string, index: number) => (
+                <TouchableOpacity key={index} className="mr-3">
+                  <Image
+                    source={{ uri: photo }}
+                    className="w-24 h-24 rounded-lg"
+                    resizeMode="cover"
+                  />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {ticket.notes && (
+          <View className="mb-4">
+            <Text className="text-gray-700 font-medium mb-2">Notes</Text>
+            <View className="bg-gray-50 p-3 rounded-lg">
+              <Text className="text-gray-800">{ticket.notes}</Text>
+            </View>
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Assignment Modal */}
+      <Modal
+        visible={showAssignModal}
+        animationType="slide"
+        onRequestClose={() => setShowAssignModal(false)}
+      >
+        <TicketAssignment
+          ticketId={ticket.id}
+          currentAssigneeId={ticket.assignee_id}
+          onAssign={handleAssign}
+          onClose={() => setShowAssignModal(false)}
+        />
+      </Modal>
     </SafeAreaView>
   );
 }

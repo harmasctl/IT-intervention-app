@@ -223,20 +223,28 @@ export default function ProfileScreen() {
           </View>
           <View className="items-center">
             <Text className="text-2xl font-bold text-blue-800">
-              {stats.customerRating}
+              {stats.ticketsInProgress}
             </Text>
-            <Text className="text-gray-500 text-sm">Rating</Text>
+            <Text className="text-gray-500 text-sm">In Progress</Text>
           </View>
         </View>
 
         {/* Menu Items */}
         <View className="mt-4">
-          <TouchableOpacity className="flex-row justify-between items-center px-4 py-4 border-b border-gray-100">
+          <TouchableOpacity
+            className="flex-row justify-between items-center px-4 py-4 border-b border-gray-100"
+            onPress={() => router.push("/notifications")}
+          >
             <View className="flex-row items-center">
               <Bell size={20} color="#4b5563" className="mr-3" />
               <Text className="text-gray-800">Notifications</Text>
             </View>
-            <ChevronRight size={20} color="#9ca3af" />
+            <View className="flex-row items-center">
+              <View className="bg-red-500 w-5 h-5 rounded-full items-center justify-center mr-2">
+                <Text className="text-white text-xs font-bold">3</Text>
+              </View>
+              <ChevronRight size={20} color="#9ca3af" />
+            </View>
           </TouchableOpacity>
 
           <TouchableOpacity className="flex-row justify-between items-center px-4 py-4 border-b border-gray-100">

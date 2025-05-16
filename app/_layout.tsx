@@ -3,14 +3,144 @@ import { useFonts } from "expo-font";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
-import { useEffect } from "react";
+import { useEffect, createContext, useContext, useState } from "react";
 import "react-native-reanimated";
 import "../global.css";
 import { Platform } from "react-native";
 import { AuthProvider, useAuth } from "../components/AuthProvider";
+import { supabase } from "../lib/supabase";
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
+
+// Create notification context
+type Notification = {
+  id: string;
+  title: string;
+  message: string;
+  type: "info" | "success" | "warning" | "error" | "low_stock";
+  read: boolean;
+  timestamp: string;
+  related_id?: string;
+  related_type?: string;
+  user_id: string;
+};
+
+type NotificationContextType = {
+  notifications: Notification[];
+  unreadCount: number;
+  markAsRead: (id: string) => void;
+  markAllAsRead: () => void;
+  refreshNotifications: () => Promise<void>;
+};
+
+const NotificationContext = createContext<NotificationContextType>({
+  notifications: [],
+  unreadCount: 0,
+  markAsRead: () => {},
+  markAllAsRead: () => {},
+  refreshNotifications: async () => {},
+});
+
+export const useNotifications = () => useContext(NotificationContext);
+
+const NotificationProvider = ({ children }: { children: React.ReactNode }) => {
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const { session } = useAuth();
+
+  const refreshNotifications = async () => {
+    if (!session?.user?.id) return;
+
+    try {
+      const { data, error } = await supabase
+        .from("notifications")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      if (data) {
+        setNotifications(data as Notification[]);
+        setUnreadCount(data.filter((n) => !n.is_read).length);
+      }
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+    }
+  };
+
+  useEffect(() => {
+    if (session?.user?.id) {
+      refreshNotifications();
+
+      // Set up real-time subscription for notifications
+      const notificationSubscription = supabase
+        .channel("notifications-channel")
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "notifications" },
+          () => {
+            refreshNotifications();
+          },
+        )
+        .subscribe();
+
+      return () => {
+        notificationSubscription.unsubscribe();
+      };
+    }
+  }, [session]);
+
+  const markAsRead = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from("notifications")
+        .update({ is_read: true })
+        .eq("id", id);
+
+      if (error) throw error;
+
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)),
+      );
+      setUnreadCount((prev) => Math.max(0, prev - 1));
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
+    }
+  };
+
+  const markAllAsRead = async () => {
+    if (!session?.user?.id) return;
+
+    try {
+      const { error } = await supabase
+        .from("notifications")
+        .update({ is_read: true })
+        .eq("is_read", false);
+
+      if (error) throw error;
+
+      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+      setUnreadCount(0);
+    } catch (error) {
+      console.error("Error marking all notifications as read:", error);
+    }
+  };
+
+  return (
+    <NotificationContext.Provider
+      value={{
+        notifications,
+        unreadCount,
+        markAsRead,
+        markAllAsRead,
+        refreshNotifications,
+      }}
+    >
+      {children}
+    </NotificationContext.Provider>
+  );
+};
 
 function RootLayoutNav() {
   const { session, user, loading } = useAuth();
@@ -69,6 +199,10 @@ function RootLayoutNav() {
       <Stack.Screen name="schedule/create" options={{ headerShown: false }} />
       <Stack.Screen name="restaurants/index" options={{ headerShown: false }} />
       <Stack.Screen name="admin/index" options={{ headerShown: false }} />
+      <Stack.Screen
+        name="notifications/index"
+        options={{ headerShown: false }}
+      />
     </Stack>
   );
 }
@@ -98,7 +232,9 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={DefaultTheme}>
       <AuthProvider>
-        <RootLayoutNav />
+        <NotificationProvider>
+          <RootLayoutNav />
+        </NotificationProvider>
       </AuthProvider>
       <StatusBar style="auto" />
     </ThemeProvider>

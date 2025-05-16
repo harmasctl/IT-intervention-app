@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -38,12 +38,32 @@ export default function EquipmentHistoryScreen() {
   const [movements, setMovements] = useState<MovementRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | "in" | "out">("all");
+  const [dateFilter, setDateFilter] = useState<
+    "all" | "today" | "week" | "month"
+  >("all");
 
   useEffect(() => {
     fetchMovements();
+
+    // Set up real-time subscription for movement changes
+    const movementSubscription = supabase
+      .channel("movement-changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "equipment_movements" },
+        (payload) => {
+          console.log("Movement change received:", payload);
+          fetchMovements();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      movementSubscription.unsubscribe();
+    };
   }, []);
 
-  const fetchMovements = async () => {
+  const fetchMovements = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -92,11 +112,34 @@ export default function EquipmentHistoryScreen() {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  const isWithinDateRange = (dateString: string) => {
+    if (dateFilter === "all") return true;
+
+    const date = new Date(dateString);
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    if (dateFilter === "today") {
+      return date >= today;
+    } else if (dateFilter === "week") {
+      const weekAgo = new Date(now);
+      weekAgo.setDate(now.getDate() - 7);
+      return date >= weekAgo;
+    } else if (dateFilter === "month") {
+      const monthAgo = new Date(now);
+      monthAgo.setMonth(now.getMonth() - 1);
+      return date >= monthAgo;
+    }
+
+    return true;
   };
 
   const filteredMovements = movements.filter((movement) => {
-    if (filter === "all") return true;
-    return movement.movement_type === filter;
+    const typeMatch = filter === "all" || movement.movement_type === filter;
+    const dateMatch = isWithinDateRange(movement.timestamp);
+    return typeMatch && dateMatch;
   });
 
   const formatDate = (dateString: string) => {
@@ -178,7 +221,7 @@ export default function EquipmentHistoryScreen() {
             Filter by type:
           </Text>
         </View>
-        <View className="flex-row">
+        <View className="flex-row mb-4">
           <TouchableOpacity
             className={`px-4 py-2 mr-2 rounded-full ${filter === "all" ? "bg-blue-500" : "bg-white border border-gray-300"}`}
             onPress={() => setFilter("all")}
@@ -204,6 +247,59 @@ export default function EquipmentHistoryScreen() {
             </Text>
           </TouchableOpacity>
         </View>
+
+        <View className="flex-row items-center mb-2">
+          <Calendar size={16} color="#6b7280" />
+          <Text className="ml-1 text-gray-700 font-medium">
+            Filter by date:
+          </Text>
+        </View>
+        <View className="flex-row">
+          <TouchableOpacity
+            className={`px-4 py-2 mr-2 rounded-full ${dateFilter === "all" ? "bg-blue-500" : "bg-white border border-gray-300"}`}
+            onPress={() => setDateFilter("all")}
+          >
+            <Text
+              className={dateFilter === "all" ? "text-white" : "text-gray-700"}
+            >
+              All Time
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            className={`px-4 py-2 mr-2 rounded-full ${dateFilter === "today" ? "bg-blue-500" : "bg-white border border-gray-300"}`}
+            onPress={() => setDateFilter("today")}
+          >
+            <Text
+              className={
+                dateFilter === "today" ? "text-white" : "text-gray-700"
+              }
+            >
+              Today
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            className={`px-4 py-2 mr-2 rounded-full ${dateFilter === "week" ? "bg-blue-500" : "bg-white border border-gray-300"}`}
+            onPress={() => setDateFilter("week")}
+          >
+            <Text
+              className={dateFilter === "week" ? "text-white" : "text-gray-700"}
+            >
+              Last Week
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            className={`px-4 py-2 mr-2 rounded-full ${dateFilter === "month" ? "bg-blue-500" : "bg-white border border-gray-300"}`}
+            onPress={() => setDateFilter("month")}
+          >
+            <Text
+              className={
+                dateFilter === "month" ? "text-white" : "text-gray-700"
+              }
+            >
+              Last Month
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Movement list */}
@@ -221,6 +317,12 @@ export default function EquipmentHistoryScreen() {
             renderItem={renderMovementItem}
             keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
+            refreshing={loading}
+            onRefresh={() => {
+              setLoading(true);
+              fetchMovements();
+            }}
+            contentContainerStyle={{ paddingBottom: 20 }}
           />
         ) : (
           <View className="flex-1 justify-center items-center">

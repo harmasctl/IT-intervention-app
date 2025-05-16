@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Modal,
   Alert,
+  ScrollView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
@@ -55,9 +56,26 @@ export default function SuppliersScreen() {
 
   useEffect(() => {
     fetchSuppliers();
+
+    // Set up real-time subscription for supplier changes
+    const supplierSubscription = supabase
+      .channel("supplier-changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "suppliers" },
+        (payload) => {
+          console.log("Supplier change received:", payload);
+          fetchSuppliers();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supplierSubscription.unsubscribe();
+    };
   }, []);
 
-  const fetchSuppliers = async () => {
+  const fetchSuppliers = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -124,7 +142,7 @@ export default function SuppliersScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const handleAddSupplier = () => {
     // Reset form fields
@@ -363,6 +381,12 @@ export default function SuppliersScreen() {
             renderItem={renderSupplierItem}
             keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
+            refreshing={loading}
+            onRefresh={() => {
+              setLoading(true);
+              fetchSuppliers();
+            }}
+            contentContainerStyle={{ paddingBottom: 20 }}
           />
         ) : (
           <View className="flex-1 justify-center items-center">

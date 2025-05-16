@@ -1,205 +1,167 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
-  ScrollView,
   Alert,
-  Modal,
+  ScrollView,
 } from "react-native";
-import { X, Package, Camera } from "lucide-react-native";
-import { Image } from "expo-image";
+import { ArrowLeft, Camera, X } from "lucide-react-native";
 import { supabase } from "../lib/supabase";
-import BarcodeScanner from "./BarcodeScanner";
 
-interface AddEquipmentFormProps {
+type AddEquipmentFormProps = {
   onCancel: () => void;
   onSuccess: () => void;
-}
+};
 
-const AddEquipmentForm = ({ onCancel, onSuccess }: AddEquipmentFormProps) => {
+export default function AddEquipmentForm({
+  onCancel,
+  onSuccess,
+}: AddEquipmentFormProps) {
   const [name, setName] = useState("");
-  const [type, setType] = useState("");
-  const [stockLevel, setStockLevel] = useState("");
+  const [type, setType] = useState("Spare Parts");
+  const [stockLevel, setStockLevel] = useState("0");
   const [supplier, setSupplier] = useState("");
+  const [supplierOptions, setSupplierOptions] = useState<
+    { id: string; name: string }[]
+  >([]);
+  const [showSupplierDropdown, setShowSupplierDropdown] = useState(false);
   const [warehouseLocation, setWarehouseLocation] = useState("");
   const [notes, setNotes] = useState("");
-  const [image, setImage] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const equipmentTypes = [
     "Spare Parts",
     "Tools",
     "Cleaning Supplies",
     "Electronics",
+    "Kitchen Equipment",
+    "Office Supplies",
+    "Safety Equipment",
     "Other",
   ];
 
-  const [showScanner, setShowScanner] = useState(false);
+  useEffect(() => {
+    // Fetch suppliers for dropdown
+    const fetchSuppliers = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("suppliers")
+          .select("id, name")
+          .order("name");
 
-  const handleAddImage = () => {
-    // In a real app, this would open the camera or image picker
-    // For now, we'll just set a mock image URL
-    const mockImages = [
-      "https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=400&q=80",
-      "https://images.unsplash.com/photo-1563203369-26f2e4a5ccf7?w=400&q=80",
-      "https://images.unsplash.com/photo-1581092335397-9583eb92d232?w=400&q=80",
-    ];
-    setImage(mockImages[Math.floor(Math.random() * mockImages.length)]);
-  };
+        if (error) throw error;
 
-  const handleScanBarcode = () => {
-    setShowScanner(true);
-  };
+        if (data) {
+          setSupplierOptions(data);
+        }
+      } catch (error) {
+        console.error("Error fetching suppliers:", error);
+      }
+    };
 
-  const handleBarcodeScan = (data: string) => {
-    // Extract item information from barcode
-    if (data.includes("NAME:")) {
-      const nameMatch = data.match(/NAME:([^;]+)/);
-      if (nameMatch && nameMatch[1]) setName(nameMatch[1].trim());
-    }
-
-    if (data.includes("TYPE:")) {
-      const typeMatch = data.match(/TYPE:([^;]+)/);
-      if (typeMatch && typeMatch[1]) setType(typeMatch[1].trim());
-    }
-
-    if (data.includes("QTY:")) {
-      const qtyMatch = data.match(/QTY:(\d+)/);
-      if (qtyMatch && qtyMatch[1]) setStockLevel(qtyMatch[1]);
-    }
-
-    setShowScanner(false);
-  };
-
-  const handleCloseScanner = () => {
-    setShowScanner(false);
-  };
+    fetchSuppliers();
+  }, []);
 
   const handleSubmit = async () => {
-    if (!name || !type || !stockLevel) {
-      Alert.alert("Error", "Please fill in all required fields");
+    if (!name) {
+      Alert.alert("Error", "Please enter equipment name");
       return;
     }
 
-    if (isNaN(Number(stockLevel))) {
+    if (isNaN(parseInt(stockLevel))) {
       Alert.alert("Error", "Stock level must be a number");
       return;
     }
 
-    setIsSubmitting(true);
-
     try {
-      // Create the equipment item
+      setLoading(true);
+
+      const newEquipment = {
+        name,
+        type,
+        stock_level: parseInt(stockLevel),
+        supplier: supplier || null,
+        warehouse_location: warehouseLocation || null,
+        notes: notes || null,
+      };
+
       const { data, error } = await supabase
         .from("equipment")
-        .insert({
-          name,
-          type,
-          stock_level: Number(stockLevel),
-          supplier,
-          warehouse_location: warehouseLocation,
-          notes,
-          image_url: image,
-        })
+        .insert([newEquipment])
         .select();
 
       if (error) throw error;
-
-      // Also record the initial stock movement
-      if (data && data.length > 0) {
-        const equipmentId = data[0].id;
-
-        const { error: movementError } = await supabase
-          .from("equipment_movements")
-          .insert({
-            equipment_id: equipmentId,
-            movement_type: "in",
-            quantity: Number(stockLevel),
-            reason: "Initial stock",
-            previous_stock: 0,
-            new_stock: Number(stockLevel),
-          });
-
-        if (movementError) {
-          console.error("Error recording initial movement:", movementError);
-          // Continue anyway since the equipment was created successfully
-        }
-      }
 
       Alert.alert("Success", "Equipment added successfully");
       onSuccess();
     } catch (error) {
       console.error("Error adding equipment:", error);
-      Alert.alert("Error", "Failed to add equipment. Please try again.");
+      Alert.alert("Error", "Failed to add equipment");
     } finally {
-      setIsSubmitting(false);
+      setLoading(false);
     }
   };
 
   return (
-    <>
-      {showScanner && (
-        <Modal animationType="slide" transparent={false} visible={showScanner}>
-          <BarcodeScanner
-            onScan={handleBarcodeScan}
-            onClose={handleCloseScanner}
-            mode="stock"
-          />
-        </Modal>
-      )}
-      <ScrollView className="flex-1 bg-white">
-        <View className="p-4">
-          <View className="flex-row justify-between items-center mb-6">
-            <Text className="text-2xl font-bold">Add New Stock Item</Text>
-            <TouchableOpacity onPress={onCancel}>
-              <X size={24} color="#666" />
-            </TouchableOpacity>
-          </View>
+    <View className="flex-1 bg-white">
+      {/* Header */}
+      <View className="flex-row justify-between items-center px-4 py-3 border-b border-gray-200">
+        <TouchableOpacity onPress={onCancel} className="flex-row items-center">
+          <ArrowLeft size={20} color="#3b82f6" />
+          <Text className="text-blue-500 ml-1">Cancel</Text>
+        </TouchableOpacity>
+        <Text className="text-xl font-bold text-blue-800">Add Stock Item</Text>
+        <TouchableOpacity
+          onPress={handleSubmit}
+          disabled={loading}
+          className={`${loading ? "opacity-50" : ""}`}
+        >
+          <Text className="text-blue-600 font-medium">
+            {loading ? "Saving..." : "Save"}
+          </Text>
+        </TouchableOpacity>
+      </View>
 
+      <ScrollView className="flex-1 p-4">
+        <View className="space-y-4">
           <View className="mb-4">
-            <Text className="text-gray-700 mb-1 font-medium">Item Name *</Text>
-            <View className="flex-row">
-              <TextInput
-                className="border border-gray-300 rounded-lg px-3 py-2 flex-1 mr-2"
-                placeholder="Enter item name"
-                value={name}
-                onChangeText={setName}
-              />
-              <TouchableOpacity
-                className="bg-green-500 p-3 rounded-lg"
-                onPress={handleScanBarcode}
-              >
-                <Camera size={20} color="white" />
-              </TouchableOpacity>
-            </View>
+            <Text className="text-gray-700 mb-1 font-medium">Name *</Text>
+            <TextInput
+              className="border border-gray-300 rounded-lg px-3 py-2"
+              placeholder="Enter equipment name"
+              value={name}
+              onChangeText={setName}
+            />
           </View>
 
           <View className="mb-4">
             <Text className="text-gray-700 mb-1 font-medium">Type *</Text>
             <View className="border border-gray-300 rounded-lg overflow-hidden">
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {equipmentTypes.map((item) => (
-                  <TouchableOpacity
-                    key={item}
-                    className={`px-4 py-3 ${type === item ? "bg-blue-500" : "bg-white"}`}
-                    onPress={() => setType(item)}
-                  >
-                    <Text
-                      className={`${type === item ? "text-white" : "text-gray-700"}`}
+                <View className="flex-row p-1">
+                  {equipmentTypes.map((equipType) => (
+                    <TouchableOpacity
+                      key={equipType}
+                      className={`px-3 py-2 rounded-lg mr-2 ${type === equipType ? "bg-blue-500" : "bg-gray-100"}`}
+                      onPress={() => setType(equipType)}
                     >
-                      {item}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                      <Text
+                        className={`${type === equipType ? "text-white" : "text-gray-700"}`}
+                      >
+                        {equipType}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
               </ScrollView>
             </View>
           </View>
 
           <View className="mb-4">
             <Text className="text-gray-700 mb-1 font-medium">
-              Stock Level *
+              Initial Stock *
             </Text>
             <TextInput
               className="border border-gray-300 rounded-lg px-3 py-2"
@@ -212,12 +174,51 @@ const AddEquipmentForm = ({ onCancel, onSuccess }: AddEquipmentFormProps) => {
 
           <View className="mb-4">
             <Text className="text-gray-700 mb-1 font-medium">Supplier</Text>
-            <TextInput
-              className="border border-gray-300 rounded-lg px-3 py-2"
-              placeholder="Enter supplier name"
-              value={supplier}
-              onChangeText={setSupplier}
-            />
+            <TouchableOpacity
+              onPress={() => setShowSupplierDropdown(!showSupplierDropdown)}
+              className="border border-gray-300 rounded-lg px-3 py-2 flex-row justify-between items-center"
+            >
+              <Text className={supplier ? "text-gray-800" : "text-gray-400"}>
+                {supplier || "Select a supplier"}
+              </Text>
+              <Text className="text-gray-500">
+                {showSupplierDropdown ? "▲" : "▼"}
+              </Text>
+            </TouchableOpacity>
+
+            {showSupplierDropdown && (
+              <View className="border border-gray-300 rounded-lg mt-1 max-h-40 bg-white z-10">
+                <ScrollView>
+                  {supplierOptions.map((item) => (
+                    <TouchableOpacity
+                      key={item.id}
+                      className="px-3 py-2 border-b border-gray-100"
+                      onPress={() => {
+                        setSupplier(item.name);
+                        setShowSupplierDropdown(false);
+                      }}
+                    >
+                      <Text className="text-gray-800">{item.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                  <TouchableOpacity
+                    className="px-3 py-2 bg-blue-50"
+                    onPress={() => {
+                      // In a real app, this would navigate to add supplier screen
+                      Alert.alert(
+                        "Add Supplier",
+                        "Navigate to add supplier screen",
+                      );
+                      setShowSupplierDropdown(false);
+                    }}
+                  >
+                    <Text className="text-blue-600 font-medium">
+                      + Add New Supplier
+                    </Text>
+                  </TouchableOpacity>
+                </ScrollView>
+              </View>
+            )}
           </View>
 
           <View className="mb-4">
@@ -226,7 +227,7 @@ const AddEquipmentForm = ({ onCancel, onSuccess }: AddEquipmentFormProps) => {
             </Text>
             <TextInput
               className="border border-gray-300 rounded-lg px-3 py-2"
-              placeholder="Enter warehouse location (e.g., A-12-B)"
+              placeholder="Enter warehouse location"
               value={warehouseLocation}
               onChangeText={setWarehouseLocation}
             />
@@ -237,70 +238,43 @@ const AddEquipmentForm = ({ onCancel, onSuccess }: AddEquipmentFormProps) => {
             <TextInput
               className="border border-gray-300 rounded-lg px-3 py-2 h-24"
               placeholder="Enter any additional notes"
-              multiline
-              textAlignVertical="top"
               value={notes}
               onChangeText={setNotes}
+              multiline
+              textAlignVertical="top"
             />
           </View>
 
-          <View className="mb-6">
-            <Text className="text-gray-700 mb-1 font-medium">Item Image</Text>
-            {image ? (
-              <View className="relative">
-                <Image
-                  source={{ uri: image }}
-                  className="w-full h-48 rounded-lg"
-                  contentFit="cover"
-                />
-                <TouchableOpacity
-                  className="absolute top-2 right-2 bg-black bg-opacity-50 rounded-full p-1"
-                  onPress={() => setImage(null)}
-                >
-                  <X size={16} color="white" />
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <TouchableOpacity
-                className="border-2 border-dashed border-gray-300 rounded-lg h-48 items-center justify-center"
-                onPress={handleAddImage}
-              >
-                <Package size={32} color="#666" />
-                <Text className="text-gray-500 mt-2">Add Item Image</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          <View className="flex-row mb-4">
-            <TouchableOpacity
-              className="bg-gray-200 rounded-lg py-3 px-4 flex-1 mr-2"
-              onPress={onCancel}
-              disabled={isSubmitting}
-            >
-              <Text className="text-gray-700 text-center font-medium">
-                Cancel
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              className={`rounded-lg py-3 px-4 flex-1 ml-2 ${isSubmitting ? "bg-blue-300" : "bg-blue-500"}`}
-              onPress={handleSubmit}
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? (
-                <Text className="text-white text-center font-medium">
-                  Adding...
-                </Text>
-              ) : (
-                <Text className="text-white text-center font-medium">
-                  Add Stock Item
-                </Text>
-              )}
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            className="bg-blue-600 py-3 rounded-lg items-center mt-4"
+            onPress={handleSubmit}
+            disabled={loading}
+          >
+            <Text className="text-white font-bold text-lg">
+              {loading ? "Adding..." : "Add Stock Item"}
+            </Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
-    </>
-  );
-};
 
-export default AddEquipmentForm;
+      {/* Barcode Scanner Modal */}
+      <Modal
+        visible={showBarcodeScanner}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setShowBarcodeScanner(false)}
+      >
+        <View style={{ flex: 1 }}>
+          <BarcodeScanner
+            onScan={(data) => {
+              setBarcodeId(data);
+              setShowBarcodeScanner(false);
+            }}
+            onClose={() => setShowBarcodeScanner(false)}
+            mode="equipment"
+          />
+        </View>
+      </Modal>
+    </View>
+  );
+}

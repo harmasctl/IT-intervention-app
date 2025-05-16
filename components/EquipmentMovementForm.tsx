@@ -1,183 +1,284 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
-  ScrollView,
   Alert,
   Modal,
+  ScrollView,
 } from "react-native";
-import { X, ArrowDownUp, Camera } from "lucide-react-native";
+import { ArrowLeft, Camera, ArrowUp, ArrowDown } from "lucide-react-native";
 import { supabase } from "../lib/supabase";
 import BarcodeScanner from "./BarcodeScanner";
 
-interface EquipmentItem {
+type EquipmentItem = {
   id: string;
   name: string;
   type: string;
   stock_level: number;
-}
+  supplier: string | null;
+  warehouse_location: string | null;
+  min_stock_level?: number;
+  is_critical?: boolean;
+  barcode_id?: string | null;
+};
 
-interface EquipmentMovementFormProps {
+type EquipmentMovementFormProps = {
+  equipment: EquipmentItem;
   onCancel: () => void;
   onSuccess: () => void;
-  equipment?: EquipmentItem;
-}
+};
 
-const EquipmentMovementForm = ({
+export default function EquipmentMovementForm({
+  equipment,
   onCancel,
   onSuccess,
-  equipment,
-}: EquipmentMovementFormProps) => {
+}: EquipmentMovementFormProps) {
   const [movementType, setMovementType] = useState<"in" | "out">("in");
-  const [quantity, setQuantity] = useState("");
+  const [quantity, setQuantity] = useState("1");
   const [reason, setReason] = useState("");
   const [destination, setDestination] = useState("");
-  const [notes, setNotes] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
+  const [destinationOptions, setDestinationOptions] = useState<
+    { id: string; name: string }[]
+  >([]);
+  const [showDestinationDropdown, setShowDestinationDropdown] = useState(false);
+  const [warehouseLocation, setWarehouseLocation] = useState(
+    equipment.warehouse_location || "",
+  );
+  const [warehouseOptions, setWarehouseOptions] = useState<string[]>([
+    "Main Warehouse",
+    "Secondary Storage",
+    "Kitchen Storage",
+    "Repair Shop",
+  ]);
+  const [showWarehouseDropdown, setShowWarehouseDropdown] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
 
-  const handleScanBarcode = () => {
-    setShowScanner(true);
-  };
+  useEffect(() => {
+    // Fetch restaurants for destination dropdown
+    const fetchRestaurants = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("restaurants")
+          .select("id, name")
+          .order("name");
 
-  const handleBarcodeScan = (data: string) => {
-    setQuantity(data.match(/\d+/)?.[0] || "1");
-    setShowScanner(false);
-  };
+        if (error) throw error;
 
-  const handleCloseScanner = () => {
-    setShowScanner(false);
-  };
+        if (data) {
+          setDestinationOptions(data);
+        }
+      } catch (error) {
+        console.error("Error fetching restaurants:", error);
+      }
+    };
+
+    fetchRestaurants();
+  }, []);
 
   const handleSubmit = async () => {
-    if (!quantity || isNaN(Number(quantity)) || Number(quantity) <= 0) {
+    if (isNaN(parseInt(quantity)) || parseInt(quantity) <= 0) {
       Alert.alert("Error", "Please enter a valid quantity");
       return;
     }
 
+    if (movementType === "out" && parseInt(quantity) > equipment.stock_level) {
+      Alert.alert(
+        "Error",
+        `Cannot remove more than current stock (${equipment.stock_level})`,
+      );
+      return;
+    }
+
     if (!reason) {
-      Alert.alert("Error", "Please enter a reason for the movement");
+      Alert.alert("Error", "Please enter a reason for this movement");
       return;
     }
 
-    if (
-      movementType === "out" &&
-      Number(quantity) > (equipment?.stock_level || 0)
-    ) {
-      Alert.alert("Error", "Cannot remove more than available stock");
+    if (movementType === "out" && !destination) {
+      Alert.alert("Error", "Please enter a destination");
       return;
     }
 
-    setIsSubmitting(true);
+    if (movementType === "in" && !warehouseLocation) {
+      Alert.alert("Error", "Please specify a warehouse location");
+      return;
+    }
 
     try {
-      if (!equipment?.id) {
-        throw new Error("Equipment ID is missing");
+      setLoading(true);
+
+      const quantityNum = parseInt(quantity);
+      const previousStock = equipment.stock_level;
+      const newStock =
+        movementType === "in"
+          ? previousStock + quantityNum
+          : previousStock - quantityNum;
+
+      // First, update the equipment stock level and warehouse location if changed
+      const updateData: any = { stock_level: newStock };
+
+      // If warehouse location has changed, update it
+      if (
+        movementType === "in" &&
+        warehouseLocation !== equipment.warehouse_location
+      ) {
+        updateData.warehouse_location = warehouseLocation;
       }
 
-      // Calculate the new stock level
-      const currentStock = equipment.stock_level || 0;
-      const quantityNum = Number(quantity);
-      const newStockLevel =
-        movementType === "in"
-          ? currentStock + quantityNum
-          : currentStock - quantityNum;
-
-      // First, update the equipment stock level
       const { error: updateError } = await supabase
         .from("equipment")
-        .update({ stock_level: newStockLevel })
+        .update(updateData)
         .eq("id", equipment.id);
 
       if (updateError) throw updateError;
 
       // Then, record the movement
+      const movementRecord = {
+        equipment_id: equipment.id,
+        movement_type: movementType,
+        quantity: quantityNum,
+        reason,
+        destination: movementType === "out" ? destination : null,
+        warehouse_location: movementType === "in" ? warehouseLocation : null,
+        previous_stock: previousStock,
+        new_stock: newStock,
+        timestamp: new Date().toISOString(),
+      };
+
       const { error: movementError } = await supabase
         .from("equipment_movements")
-        .insert({
-          equipment_id: equipment.id,
-          movement_type: movementType,
-          quantity: quantityNum,
-          reason: reason,
-          destination: destination || null,
-          notes: notes || null,
-          previous_stock: currentStock,
-          new_stock: newStockLevel,
-          timestamp: new Date().toISOString(),
-        });
+        .insert([movementRecord]);
 
       if (movementError) throw movementError;
 
+      // Check if stock is below minimum level after movement
+      if (
+        movementType === "out" &&
+        newStock <= (equipment.min_stock_level || 5)
+      ) {
+        // Create a notification for low stock
+        const notificationData = {
+          title: "Low Stock Alert",
+          message: `${equipment.name} is running low (${newStock} remaining)`,
+          type: "low_stock",
+          related_id: equipment.id,
+          related_type: "equipment",
+          is_read: false,
+          created_at: new Date().toISOString(),
+        };
+
+        await supabase.from("notifications").insert([notificationData]);
+      }
+
       Alert.alert(
         "Success",
-        `Equipment ${movementType === "in" ? "received" : "issued"} successfully`,
+        `Stock ${movementType === "in" ? "added" : "removed"} successfully`,
       );
       onSuccess();
     } catch (error) {
-      console.error("Error recording equipment movement:", error);
-      Alert.alert("Error", "Failed to record movement. Please try again.");
+      console.error("Error updating stock:", error);
+      Alert.alert("Error", "Failed to update stock");
     } finally {
-      setIsSubmitting(false);
+      setLoading(false);
     }
   };
 
+  const handleScan = (data: string) => {
+    setShowScanner(false);
+    // In a real app, you would validate the scanned data
+    // For now, we'll just set it as the reason
+    setReason(`Scanned: ${data}`);
+  };
+
   return (
-    <>
-      {showScanner && (
-        <Modal animationType="slide" transparent={false} visible={showScanner}>
-          <BarcodeScanner
-            onScan={handleBarcodeScan}
-            onClose={handleCloseScanner}
-            mode="stock"
-          />
-        </Modal>
-      )}
-      <ScrollView className="flex-1 bg-white">
-        <View className="p-4">
-          <View className="flex-row justify-between items-center mb-6">
-            <Text className="text-2xl font-bold">Record Stock Movement</Text>
-            <TouchableOpacity onPress={onCancel}>
-              <X size={24} color="#666" />
-            </TouchableOpacity>
-          </View>
+    <View className="flex-1 bg-white">
+      {/* Header */}
+      <View className="flex-row justify-between items-center px-4 py-3 border-b border-gray-200">
+        <TouchableOpacity onPress={onCancel} className="flex-row items-center">
+          <ArrowLeft size={20} color="#3b82f6" />
+          <Text className="text-blue-500 ml-1">Cancel</Text>
+        </TouchableOpacity>
+        <Text className="text-xl font-bold text-blue-800">Manage Stock</Text>
+        <TouchableOpacity
+          onPress={handleSubmit}
+          disabled={loading}
+          className={`${loading ? "opacity-50" : ""}`}
+        >
+          <Text className="text-blue-600 font-medium">
+            {loading ? "Saving..." : "Save"}
+          </Text>
+        </TouchableOpacity>
+      </View>
 
-          {equipment && (
-            <View className="bg-gray-100 p-4 rounded-lg mb-4">
-              <Text className="font-bold text-lg">{equipment.name}</Text>
-              <Text className="text-gray-600">{equipment.type}</Text>
-              <Text className="mt-1">
-                Current Stock:{" "}
-                <Text className="font-bold">{equipment.stock_level}</Text>
+      <ScrollView className="flex-1 p-4">
+        <View className="bg-blue-50 p-4 rounded-lg mb-6">
+          <View className="flex-row justify-between items-start">
+            <View>
+              <Text className="text-lg font-bold text-blue-800">
+                {equipment.name}
               </Text>
+              <Text className="text-blue-600 mt-1">
+                Current Stock: {equipment.stock_level}
+              </Text>
+              <Text className="text-gray-600 mt-1">
+                Location: {equipment.warehouse_location || "Not specified"}
+              </Text>
+              {equipment.min_stock_level && (
+                <Text className="text-gray-600 mt-1">
+                  Min Stock Level: {equipment.min_stock_level}
+                </Text>
+              )}
+              {equipment.barcode_id && (
+                <Text className="text-gray-600 mt-1">
+                  Barcode: {equipment.barcode_id}
+                </Text>
+              )}
             </View>
-          )}
+            {equipment.is_critical && (
+              <View className="bg-red-100 px-3 py-1 rounded-full">
+                <Text className="text-red-700 text-xs font-medium">
+                  Critical Item
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
 
+        <View className="space-y-4">
           <View className="mb-4">
-            <Text className="text-gray-700 mb-1 font-medium">
+            <Text className="text-gray-700 mb-2 font-medium">
               Movement Type *
             </Text>
-            <View className="flex-row border border-gray-300 rounded-lg overflow-hidden">
+            <View className="flex-row">
               <TouchableOpacity
-                className={`flex-1 py-3 ${movementType === "in" ? "bg-blue-500" : "bg-white"}`}
+                className={`flex-1 flex-row items-center justify-center py-3 rounded-l-lg ${movementType === "in" ? "bg-green-500" : "bg-gray-200"}`}
                 onPress={() => setMovementType("in")}
               >
+                <ArrowDown
+                  size={18}
+                  color={movementType === "in" ? "white" : "#4b5563"}
+                />
                 <Text
-                  className={`text-center ${movementType === "in" ? "text-white" : "text-gray-700"}`}
+                  className={`ml-2 font-medium ${movementType === "in" ? "text-white" : "text-gray-700"}`}
                 >
-                  Stock In (Receive)
+                  Stock In
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                className={`flex-1 py-3 ${movementType === "out" ? "bg-blue-500" : "bg-white"}`}
+                className={`flex-1 flex-row items-center justify-center py-3 rounded-r-lg ${movementType === "out" ? "bg-red-500" : "bg-gray-200"}`}
                 onPress={() => setMovementType("out")}
               >
+                <ArrowUp
+                  size={18}
+                  color={movementType === "out" ? "white" : "#4b5563"}
+                />
                 <Text
-                  className={`text-center ${movementType === "out" ? "text-white" : "text-gray-700"}`}
+                  className={`ml-2 font-medium ${movementType === "out" ? "text-white" : "text-gray-700"}`}
                 >
-                  Stock Out (Issue)
+                  Stock Out
                 </Text>
               </TouchableOpacity>
             </View>
@@ -185,89 +286,186 @@ const EquipmentMovementForm = ({
 
           <View className="mb-4">
             <Text className="text-gray-700 mb-1 font-medium">Quantity *</Text>
+            <TextInput
+              className="border border-gray-300 rounded-lg px-3 py-2"
+              placeholder="Enter quantity"
+              value={quantity}
+              onChangeText={setQuantity}
+              keyboardType="numeric"
+            />
+          </View>
+
+          <View className="mb-4">
+            <Text className="text-gray-700 mb-1 font-medium">Reason *</Text>
             <View className="flex-row">
               <TextInput
-                className="border border-gray-300 rounded-lg px-3 py-2 flex-1 mr-2"
-                placeholder="Enter quantity"
-                value={quantity}
-                onChangeText={setQuantity}
-                keyboardType="numeric"
+                className="border border-gray-300 rounded-l-lg px-3 py-2 flex-1"
+                placeholder="Why is stock changing?"
+                value={reason}
+                onChangeText={setReason}
               />
               <TouchableOpacity
-                className="bg-green-500 p-3 rounded-lg"
-                onPress={handleScanBarcode}
+                className="bg-blue-500 rounded-r-lg px-3 items-center justify-center"
+                onPress={() => setShowScanner(true)}
               >
                 <Camera size={20} color="white" />
               </TouchableOpacity>
             </View>
           </View>
 
-          <View className="mb-4">
-            <Text className="text-gray-700 mb-1 font-medium">Reason *</Text>
-            <TextInput
-              className="border border-gray-300 rounded-lg px-3 py-2"
-              placeholder={`Reason for ${movementType === "in" ? "receiving" : "issuing"} stock`}
-              value={reason}
-              onChangeText={setReason}
-            />
-          </View>
-
-          {movementType === "out" && (
+          {movementType === "in" ? (
             <View className="mb-4">
               <Text className="text-gray-700 mb-1 font-medium">
-                Destination/Restaurant
+                Warehouse Location *
               </Text>
-              <TextInput
-                className="border border-gray-300 rounded-lg px-3 py-2"
-                placeholder="Where is this stock going?"
-                value={destination}
-                onChangeText={setDestination}
-              />
+              <TouchableOpacity
+                onPress={() => setShowWarehouseDropdown(!showWarehouseDropdown)}
+                className="border border-gray-300 rounded-lg px-3 py-2 flex-row justify-between items-center"
+              >
+                <Text
+                  className={
+                    warehouseLocation ? "text-gray-800" : "text-gray-400"
+                  }
+                >
+                  {warehouseLocation || "Select a warehouse location"}
+                </Text>
+                <Text className="text-gray-500">
+                  {showWarehouseDropdown ? "▲" : "▼"}
+                </Text>
+              </TouchableOpacity>
+
+              {showWarehouseDropdown && (
+                <View className="border border-gray-300 rounded-lg mt-1 max-h-40 bg-white z-10">
+                  <ScrollView>
+                    {warehouseOptions.map((location) => (
+                      <TouchableOpacity
+                        key={location}
+                        className="px-3 py-2 border-b border-gray-100"
+                        onPress={() => {
+                          setWarehouseLocation(location);
+                          setShowWarehouseDropdown(false);
+                        }}
+                      >
+                        <Text className="text-gray-800">{location}</Text>
+                      </TouchableOpacity>
+                    ))}
+                    <TouchableOpacity
+                      className="px-3 py-2 bg-blue-50"
+                      onPress={() => {
+                        Alert.prompt(
+                          "Add Location",
+                          "Enter new warehouse location",
+                          (text) => {
+                            if (text) {
+                              setWarehouseLocation(text);
+                              setWarehouseOptions([...warehouseOptions, text]);
+                              setShowWarehouseDropdown(false);
+                            }
+                          },
+                        );
+                      }}
+                    >
+                      <Text className="text-blue-600 font-medium">
+                        + Add New Location
+                      </Text>
+                    </TouchableOpacity>
+                  </ScrollView>
+                </View>
+              )}
+            </View>
+          ) : (
+            <View className="mb-4">
+              <Text className="text-gray-700 mb-1 font-medium">
+                Destination/Restaurant *
+              </Text>
+              <TouchableOpacity
+                onPress={() =>
+                  setShowDestinationDropdown(!showDestinationDropdown)
+                }
+                className="border border-gray-300 rounded-lg px-3 py-2 flex-row justify-between items-center"
+              >
+                <Text
+                  className={destination ? "text-gray-800" : "text-gray-400"}
+                >
+                  {destination || "Select a destination"}
+                </Text>
+                <Text className="text-gray-500">
+                  {showDestinationDropdown ? "▲" : "▼"}
+                </Text>
+              </TouchableOpacity>
+
+              {showDestinationDropdown && (
+                <View className="border border-gray-300 rounded-lg mt-1 max-h-40 bg-white z-10">
+                  <ScrollView>
+                    {destinationOptions.map((item) => (
+                      <TouchableOpacity
+                        key={item.id}
+                        className="px-3 py-2 border-b border-gray-100"
+                        onPress={() => {
+                          setDestination(item.name);
+                          setShowDestinationDropdown(false);
+                        }}
+                      >
+                        <Text className="text-gray-800">{item.name}</Text>
+                      </TouchableOpacity>
+                    ))}
+                    <TouchableOpacity
+                      className="px-3 py-2 bg-blue-50"
+                      onPress={() => {
+                        // Allow manual entry
+                        Alert.prompt(
+                          "Custom Destination",
+                          "Enter destination name",
+                          (text) => {
+                            if (text) {
+                              setDestination(text);
+                              setShowDestinationDropdown(false);
+                            }
+                          },
+                        );
+                      }}
+                    >
+                      <Text className="text-blue-600 font-medium">
+                        + Add Custom Destination
+                      </Text>
+                    </TouchableOpacity>
+                  </ScrollView>
+                </View>
+              )}
             </View>
           )}
 
-          <View className="mb-6">
-            <Text className="text-gray-700 mb-1 font-medium">Notes</Text>
-            <TextInput
-              className="border border-gray-300 rounded-lg px-3 py-2 h-24"
-              placeholder="Enter any additional notes"
-              multiline
-              textAlignVertical="top"
-              value={notes}
-              onChangeText={setNotes}
-            />
-          </View>
-
-          <View className="flex-row mb-4">
-            <TouchableOpacity
-              className="bg-gray-200 rounded-lg py-3 px-4 flex-1 mr-2"
-              onPress={onCancel}
-              disabled={isSubmitting}
-            >
-              <Text className="text-gray-700 text-center font-medium">
-                Cancel
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              className={`rounded-lg py-3 px-4 flex-1 ml-2 ${isSubmitting ? "bg-blue-300" : "bg-blue-500"}`}
-              onPress={handleSubmit}
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? (
-                <Text className="text-white text-center font-medium">
-                  Submitting...
-                </Text>
-              ) : (
-                <Text className="text-white text-center font-medium">
-                  {movementType === "in" ? "Receive Stock" : "Issue Stock"}
-                </Text>
-              )}
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            className={`py-3 rounded-lg items-center mt-4 ${movementType === "in" ? "bg-green-600" : "bg-red-600"}`}
+            onPress={handleSubmit}
+            disabled={loading}
+          >
+            <Text className="text-white font-bold text-lg">
+              {loading
+                ? "Processing..."
+                : movementType === "in"
+                  ? "Add Stock"
+                  : "Remove Stock"}
+            </Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
-    </>
-  );
-};
 
-export default EquipmentMovementForm;
+      {/* Barcode Scanner Modal */}
+      <Modal
+        visible={showScanner}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setShowScanner(false)}
+      >
+        <View style={{ flex: 1 }}>
+          <BarcodeScanner
+            onScan={handleScan}
+            onClose={() => setShowScanner(false)}
+            mode="equipment"
+          />
+        </View>
+      </Modal>
+    </View>
+  );
+}

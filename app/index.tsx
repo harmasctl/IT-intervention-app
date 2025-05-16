@@ -31,6 +31,7 @@ import {
 import TicketList from "../components/TicketList";
 import { useAuth } from "../components/AuthProvider";
 import { supabase } from "../lib/supabase";
+import NotificationBadge from "../components/NotificationBadge";
 
 export default function Dashboard() {
   const router = useRouter();
@@ -116,11 +117,11 @@ export default function Dashboard() {
           <Text className="text-2xl font-bold text-white">Tech Support</Text>
         </View>
         <View className="flex-row space-x-4">
-          <TouchableOpacity className="relative bg-blue-800 p-2 rounded-full">
-            <Bell size={20} color="#ffffff" />
-            <View className="absolute -top-1 -right-1 bg-red-500 rounded-full w-5 h-5 flex items-center justify-center">
-              <Text className="text-xs text-white font-bold">3</Text>
-            </View>
+          <TouchableOpacity
+            className="relative bg-blue-800 p-2 rounded-full"
+            onPress={() => router.push("/notifications")}
+          >
+            <NotificationBadge color="white" />
           </TouchableOpacity>
           <TouchableOpacity className="bg-blue-800 p-2 rounded-full">
             <Filter size={20} color="#ffffff" />
@@ -196,7 +197,7 @@ export default function Dashboard() {
                 </View>
               </View>
 
-              <View className="flex-row justify-between">
+              <View className="flex-row justify-between mb-4">
                 <View className="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl p-4 flex-1 mr-3 shadow-sm">
                   <View className="flex-row items-center justify-between">
                     <Text className="text-sm font-medium text-green-800">
@@ -223,6 +224,56 @@ export default function Dashboard() {
                     {summaryStats.highPriority}
                   </Text>
                 </View>
+              </View>
+
+              {/* SLA Metrics */}
+              <Text className="text-lg font-semibold mb-3 text-gray-800">
+                SLA Metrics
+              </Text>
+              <View className="flex-row justify-between mb-4">
+                <View className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-2xl p-4 flex-1 mr-3 shadow-sm">
+                  <View className="flex-row items-center justify-between">
+                    <Text className="text-sm font-medium text-purple-800">
+                      SLA Compliant
+                    </Text>
+                    <View className="bg-purple-200 p-1.5 rounded-full">
+                      <CheckCircle size={16} color="#7e22ce" />
+                    </View>
+                  </View>
+                  <Text className="text-3xl font-bold text-purple-700 mt-2">
+                    {summaryStats.slaCompliant}
+                  </Text>
+                </View>
+                <View className="bg-gradient-to-br from-cyan-50 to-cyan-100 rounded-2xl p-4 flex-1 shadow-sm">
+                  <View className="flex-row items-center justify-between">
+                    <Text className="text-sm font-medium text-cyan-800">
+                      Avg Response
+                    </Text>
+                    <View className="bg-cyan-200 p-1.5 rounded-full">
+                      <Clock size={16} color="#0e7490" />
+                    </View>
+                  </View>
+                  <Text className="text-3xl font-bold text-cyan-700 mt-2">
+                    {summaryStats.avgResponseTime}
+                  </Text>
+                </View>
+              </View>
+
+              <View className="flex-row justify-between">
+                <View className="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-2xl p-4 flex-1 mr-3 shadow-sm">
+                  <View className="flex-row items-center justify-between">
+                    <Text className="text-sm font-medium text-indigo-800">
+                      Avg Resolution
+                    </Text>
+                    <View className="bg-indigo-200 p-1.5 rounded-full">
+                      <Clock size={16} color="#4f46e5" />
+                    </View>
+                  </View>
+                  <Text className="text-3xl font-bold text-indigo-700 mt-2">
+                    {summaryStats.avgResolutionTime}
+                  </Text>
+                </View>
+                <View className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-4 flex-1 opacity-0"></View>
               </View>
             </>
           )}

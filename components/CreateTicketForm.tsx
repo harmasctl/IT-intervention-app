@@ -124,16 +124,6 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
     }
   };
 
-  const handleNext = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setCurrentStep(currentStep + 1);
-  };
-
-  const handleBack = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setCurrentStep(currentStep - 1);
-  };
-
   const handleSubmit = async () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
@@ -187,339 +177,194 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
   );
 
   const renderStepContent = () => {
-    switch (currentStep) {
-      case 0:
-        return (
-          <View className="px-4 animate-fade-in">
-            <Text className="text-lg font-bold mb-2">Ticket Title</Text>
-            <Text className="text-gray-600 mb-4">
-              Enter a clear, descriptive title for this support ticket
+    return (
+      <View className="px-4 animate-fade-in">
+        <Text className="text-lg font-bold mb-2">Create Support Ticket</Text>
+        <Text className="text-gray-600 mb-4">
+          Fill out all details to create a new support ticket
+        </Text>
+
+        {/* Ticket Title */}
+        <Text className="font-semibold mb-1">Ticket Title *</Text>
+        <TextInput
+          className="border border-gray-300 rounded-lg p-3 mb-4 bg-white"
+          placeholder="e.g., Ice Cream Machine Not Cooling"
+          value={ticketData.title}
+          onChangeText={(text) => updateTicketData("title", text)}
+        />
+
+        {/* Device Selection */}
+        <Text className="font-semibold mb-1">Select Device *</Text>
+        <TextInput
+          className="border border-gray-300 rounded-lg p-3 mb-2 bg-white"
+          placeholder="Search devices..."
+          value={deviceSearchQuery}
+          onChangeText={setDeviceSearchQuery}
+        />
+
+        {loading.devices ? (
+          <View className="items-center justify-center py-2 mb-4">
+            <ActivityIndicator size="small" color="#3b82f6" />
+            <Text className="mt-1 text-gray-500 text-sm">
+              Loading devices...
             </Text>
-            <TextInput
-              className="border border-gray-300 rounded-lg p-3 mb-4 bg-white"
-              placeholder="e.g., Ice Cream Machine Not Cooling"
-              value={ticketData.title}
-              onChangeText={(text) => updateTicketData("title", text)}
-            />
-            <TouchableOpacity
-              className={`py-3 px-4 rounded-lg ${ticketData.title.trim() ? "bg-blue-500" : "bg-gray-300"} ${ticketData.title.trim() ? "animate-pulse" : ""}`}
-              onPress={handleNext}
-              disabled={!ticketData.title.trim()}
-            >
-              <Text className="text-white text-center font-semibold">Next</Text>
-            </TouchableOpacity>
           </View>
-        );
-
-      case 1:
-        return (
-          <View className="px-4 animate-slide-in-right">
-            <Text className="text-lg font-bold mb-2">Select Device</Text>
-            <Text className="text-gray-600 mb-4">
-              Choose the device that is experiencing issues
-            </Text>
-
-            <TextInput
-              className="border border-gray-300 rounded-lg p-3 mb-4 bg-white"
-              placeholder="Search devices..."
-              value={deviceSearchQuery}
-              onChangeText={setDeviceSearchQuery}
-            />
-
-            {loading.devices ? (
-              <View className="items-center justify-center py-8">
-                <ActivityIndicator size="large" color="#3b82f6" />
-                <Text className="mt-2 text-gray-500">Loading devices...</Text>
-              </View>
-            ) : (
-              <ScrollView className="max-h-64 mb-4">
-                {filteredDevices.map((device) => (
-                  <TouchableOpacity
-                    key={device.id}
-                    className={`p-3 border-b border-gray-200 flex-row justify-between items-center ${ticketData.device?.id === device.id ? "bg-blue-50" : ""} animate-fade-in`}
-                    onPress={() => updateTicketData("device", device)}
-                  >
-                    <View>
-                      <Text className="font-semibold">{device.name}</Text>
-                      <Text className="text-gray-500 text-sm">
-                        {device.type}
-                      </Text>
-                    </View>
-                    {ticketData.device?.id === device.id && (
-                      <Check
-                        size={20}
-                        color="#3b82f6"
-                        className="animate-bounce"
-                      />
-                    )}
-                  </TouchableOpacity>
-                ))}
-                {filteredDevices.length === 0 && (
-                  <View className="py-4 items-center">
-                    <Text className="text-gray-500">No devices found</Text>
-                  </View>
+        ) : (
+          <ScrollView className="max-h-32 mb-4 border border-gray-200 rounded-lg">
+            {filteredDevices.map((device) => (
+              <TouchableOpacity
+                key={device.id}
+                className={`p-3 border-b border-gray-200 flex-row justify-between items-center ${ticketData.device?.id === device.id ? "bg-blue-50" : ""}`}
+                onPress={() => updateTicketData("device", device)}
+              >
+                <View>
+                  <Text className="font-semibold">{device.name}</Text>
+                  <Text className="text-gray-500 text-sm">{device.type}</Text>
+                </View>
+                {ticketData.device?.id === device.id && (
+                  <Check size={20} color="#3b82f6" />
                 )}
-              </ScrollView>
-            )}
-
-            <View className="flex-row justify-between">
-              <TouchableOpacity
-                className="py-3 px-4 rounded-lg bg-gray-200 w-[48%] animate-fade-in"
-                onPress={handleBack}
-              >
-                <Text className="text-gray-800 text-center font-semibold">
-                  Back
-                </Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                className={`py-3 px-4 rounded-lg w-[48%] ${ticketData.device ? "bg-blue-500" : "bg-gray-300"} animate-fade-in`}
-                onPress={handleNext}
-                disabled={!ticketData.device}
-              >
-                <Text className="text-white text-center font-semibold">
-                  Next
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        );
-
-      case 2:
-        return (
-          <View className="px-4 animate-slide-in-right">
-            <Text className="text-lg font-bold mb-2">
-              Diagnostic Information
-            </Text>
-            <Text className="text-gray-600 mb-4">
-              Describe the issue and any relevant observations
-            </Text>
-
-            <TextInput
-              className="border border-gray-300 rounded-lg p-3 mb-4 bg-white h-32"
-              placeholder="Describe the problem in detail..."
-              multiline
-              textAlignVertical="top"
-              value={ticketData.diagnosticInfo}
-              onChangeText={(text) => updateTicketData("diagnosticInfo", text)}
-            />
-
-            <View className="flex-row justify-between">
-              <TouchableOpacity
-                className="py-3 px-4 rounded-lg bg-gray-200 w-[48%] animate-fade-in"
-                onPress={handleBack}
-              >
-                <Text className="text-gray-800 text-center font-semibold">
-                  Back
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                className={`py-3 px-4 rounded-lg w-[48%] ${ticketData.diagnosticInfo.trim() ? "bg-blue-500" : "bg-gray-300"} animate-fade-in`}
-                onPress={handleNext}
-                disabled={!ticketData.diagnosticInfo.trim()}
-              >
-                <Text className="text-white text-center font-semibold">
-                  Next
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        );
-
-      case 3:
-        return (
-          <View className="px-4 animate-slide-in-right">
-            <Text className="text-lg font-bold mb-2">Restaurant Location</Text>
-            <Text className="text-gray-600 mb-4">
-              Select the restaurant where the issue is occurring
-            </Text>
-
-            <TextInput
-              className="border border-gray-300 rounded-lg p-3 mb-4 bg-white"
-              placeholder="Search restaurants..."
-              value={restaurantSearchQuery}
-              onChangeText={setRestaurantSearchQuery}
-            />
-
-            {loading.restaurants ? (
-              <View className="items-center justify-center py-8">
-                <ActivityIndicator size="large" color="#3b82f6" />
-                <Text className="mt-2 text-gray-500">
-                  Loading restaurants...
-                </Text>
+            ))}
+            {filteredDevices.length === 0 && (
+              <View className="py-4 items-center">
+                <Text className="text-gray-500">No devices found</Text>
               </View>
-            ) : (
-              <ScrollView className="max-h-64 mb-4">
-                {filteredRestaurants.map((restaurant) => (
-                  <TouchableOpacity
-                    key={restaurant.id}
-                    className={`p-3 border-b border-gray-200 flex-row justify-between items-center ${ticketData.restaurant?.id === restaurant.id ? "bg-blue-50" : ""} animate-fade-in`}
-                    onPress={() => updateTicketData("restaurant", restaurant)}
-                  >
-                    <View>
-                      <Text className="font-semibold">{restaurant.name}</Text>
-                      <Text className="text-gray-500 text-sm">
-                        {restaurant.location}
-                      </Text>
-                    </View>
-                    {ticketData.restaurant?.id === restaurant.id && (
-                      <Check
-                        size={20}
-                        color="#3b82f6"
-                        className="animate-bounce"
-                      />
-                    )}
-                  </TouchableOpacity>
-                ))}
-                {filteredRestaurants.length === 0 && (
-                  <View className="py-4 items-center">
-                    <Text className="text-gray-500">No restaurants found</Text>
-                  </View>
-                )}
-              </ScrollView>
             )}
+          </ScrollView>
+        )}
 
-            <View className="flex-row justify-between">
-              <TouchableOpacity
-                className="py-3 px-4 rounded-lg bg-gray-200 w-[48%] animate-fade-in"
-                onPress={handleBack}
-              >
-                <Text className="text-gray-800 text-center font-semibold">
-                  Back
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                className={`py-3 px-4 rounded-lg w-[48%] ${ticketData.restaurant ? "bg-blue-500" : "bg-gray-300"} animate-fade-in`}
-                onPress={handleNext}
-                disabled={!ticketData.restaurant}
-              >
-                <Text className="text-white text-center font-semibold">
-                  Next
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        );
+        {/* Diagnostic Information */}
+        <Text className="font-semibold mb-1">Diagnostic Information *</Text>
+        <TextInput
+          className="border border-gray-300 rounded-lg p-3 mb-4 bg-white h-24"
+          placeholder="Describe the problem in detail..."
+          multiline
+          textAlignVertical="top"
+          value={ticketData.diagnosticInfo}
+          onChangeText={(text) => updateTicketData("diagnosticInfo", text)}
+        />
 
-      case 4:
-        return (
-          <View className="px-4 animate-slide-in-right">
-            <Text className="text-lg font-bold mb-2">Jira Integration</Text>
-            <Text className="text-gray-600 mb-4">
-              Link this ticket to an existing Jira ticket (optional)
+        {/* Restaurant Location */}
+        <Text className="font-semibold mb-1">Restaurant Location *</Text>
+        <TextInput
+          className="border border-gray-300 rounded-lg p-3 mb-2 bg-white"
+          placeholder="Search restaurants..."
+          value={restaurantSearchQuery}
+          onChangeText={setRestaurantSearchQuery}
+        />
+
+        {loading.restaurants ? (
+          <View className="items-center justify-center py-2 mb-4">
+            <ActivityIndicator size="small" color="#3b82f6" />
+            <Text className="mt-1 text-gray-500 text-sm">
+              Loading restaurants...
             </Text>
-
-            <TextInput
-              className="border border-gray-300 rounded-lg p-3 mb-4 bg-white"
-              placeholder="e.g., TECH-123"
-              value={ticketData.jiraTicketId}
-              onChangeText={(text) => updateTicketData("jiraTicketId", text)}
-            />
-
-            <View className="flex-row justify-between">
-              <TouchableOpacity
-                className="py-3 px-4 rounded-lg bg-gray-200 w-[48%] animate-fade-in"
-                onPress={handleBack}
-              >
-                <Text className="text-gray-800 text-center font-semibold">
-                  Back
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                className="py-3 px-4 rounded-lg bg-blue-500 w-[48%] animate-fade-in"
-                onPress={handleNext}
-              >
-                <Text className="text-white text-center font-semibold">
-                  Next
-                </Text>
-              </TouchableOpacity>
-            </View>
           </View>
-        );
-
-      case 5:
-        return (
-          <View className="px-4 animate-slide-in-right">
-            <Text className="text-lg font-bold mb-2">Priority & Photos</Text>
-            <Text className="text-gray-600 mb-4">
-              Set priority level and attach relevant photos
-            </Text>
-
-            <Text className="font-semibold mb-2">Priority Level</Text>
-            <View className="flex-row mb-6">
-              {(["low", "medium", "high"] as const).map((priority) => (
-                <TouchableOpacity
-                  key={priority}
-                  className={`flex-1 py-2 mx-1 rounded-lg ${
-                    ticketData.priority === priority
-                      ? priority === "low"
-                        ? "bg-green-500"
-                        : priority === "medium"
-                          ? "bg-yellow-500"
-                          : "bg-red-500"
-                      : "bg-gray-200"
-                  } transition-colors duration-300 ease-in-out`}
-                  onPress={() => updateTicketData("priority", priority)}
-                >
-                  <Text
-                    className={`text-center font-semibold ${ticketData.priority === priority ? "text-white" : "text-gray-700"}`}
-                  >
-                    {priority.charAt(0).toUpperCase() + priority.slice(1)}
+        ) : (
+          <ScrollView className="max-h-32 mb-4 border border-gray-200 rounded-lg">
+            {filteredRestaurants.map((restaurant) => (
+              <TouchableOpacity
+                key={restaurant.id}
+                className={`p-3 border-b border-gray-200 flex-row justify-between items-center ${ticketData.restaurant?.id === restaurant.id ? "bg-blue-50" : ""}`}
+                onPress={() => updateTicketData("restaurant", restaurant)}
+              >
+                <View>
+                  <Text className="font-semibold">{restaurant.name}</Text>
+                  <Text className="text-gray-500 text-sm">
+                    {restaurant.location}
                   </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text className="font-semibold mb-2">Photos</Text>
-            <View className="flex-row flex-wrap mb-4">
-              {ticketData.photos.map((photo, index) => (
-                <View
-                  key={index}
-                  className="w-1/3 p-1 relative animate-fade-in"
-                >
-                  <Image
-                    source={{ uri: photo }}
-                    className="w-full h-24 rounded-lg"
-                  />
-                  <TouchableOpacity
-                    className="absolute top-2 right-2 bg-red-500 rounded-full w-6 h-6 items-center justify-center"
-                    onPress={() => removeMockPhoto(index)}
-                  >
-                    <Text className="text-white font-bold">×</Text>
-                  </TouchableOpacity>
                 </View>
-              ))}
-              <TouchableOpacity className="w-1/3 p-1" onPress={addMockPhoto}>
-                <View className="w-full h-24 border-2 border-dashed border-gray-300 rounded-lg items-center justify-center bg-gray-50 animate-pulse">
-                  <Camera size={24} color="#9ca3af" />
-                  <Text className="text-gray-400 mt-1">Add Photo</Text>
-                </View>
+                {ticketData.restaurant?.id === restaurant.id && (
+                  <Check size={20} color="#3b82f6" />
+                )}
+              </TouchableOpacity>
+            ))}
+            {filteredRestaurants.length === 0 && (
+              <View className="py-4 items-center">
+                <Text className="text-gray-500">No restaurants found</Text>
+              </View>
+            )}
+          </ScrollView>
+        )}
+
+        {/* Jira Integration */}
+        <Text className="font-semibold mb-1">Jira Ticket ID (Optional)</Text>
+        <TextInput
+          className="border border-gray-300 rounded-lg p-3 mb-4 bg-white"
+          placeholder="e.g., TECH-123"
+          value={ticketData.jiraTicketId}
+          onChangeText={(text) => updateTicketData("jiraTicketId", text)}
+        />
+
+        {/* Priority Level */}
+        <Text className="font-semibold mb-1">Priority Level *</Text>
+        <View className="flex-row mb-4">
+          {(["low", "medium", "high"] as const).map((priority) => (
+            <TouchableOpacity
+              key={priority}
+              className={`flex-1 py-2 mx-1 rounded-lg ${
+                ticketData.priority === priority
+                  ? priority === "low"
+                    ? "bg-green-500"
+                    : priority === "medium"
+                      ? "bg-yellow-500"
+                      : "bg-red-500"
+                  : "bg-gray-200"
+              }`}
+              onPress={() => updateTicketData("priority", priority)}
+            >
+              <Text
+                className={`text-center font-semibold ${ticketData.priority === priority ? "text-white" : "text-gray-700"}`}
+              >
+                {priority.charAt(0).toUpperCase() + priority.slice(1)}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Photos */}
+        <Text className="font-semibold mb-1">Photos (Optional)</Text>
+        <View className="flex-row flex-wrap mb-4">
+          {ticketData.photos.map((photo, index) => (
+            <View key={index} className="w-1/3 p-1 relative">
+              <Image
+                source={{ uri: photo }}
+                className="w-full h-24 rounded-lg"
+              />
+              <TouchableOpacity
+                className="absolute top-2 right-2 bg-red-500 rounded-full w-6 h-6 items-center justify-center"
+                onPress={() => removeMockPhoto(index)}
+              >
+                <Text className="text-white font-bold">×</Text>
               </TouchableOpacity>
             </View>
-
-            <View className="flex-row justify-between">
-              <TouchableOpacity
-                className="py-3 px-4 rounded-lg bg-gray-200 w-[48%] animate-fade-in"
-                onPress={handleBack}
-              >
-                <Text className="text-gray-800 text-center font-semibold">
-                  Back
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                className="py-3 px-4 rounded-lg bg-blue-500 w-[48%] animate-pulse"
-                onPress={handleSubmit}
-              >
-                <Text className="text-white text-center font-semibold">
-                  Submit Ticket
-                </Text>
-              </TouchableOpacity>
+          ))}
+          <TouchableOpacity className="w-1/3 p-1" onPress={addMockPhoto}>
+            <View className="w-full h-24 border-2 border-dashed border-gray-300 rounded-lg items-center justify-center bg-gray-50">
+              <Camera size={24} color="#9ca3af" />
+              <Text className="text-gray-400 mt-1">Add Photo</Text>
             </View>
-          </View>
-        );
+          </TouchableOpacity>
+        </View>
 
-      default:
-        return null;
-    }
+        {/* Submit Button */}
+        <TouchableOpacity
+          className={`py-3 px-4 rounded-lg ${ticketData.title.trim() && ticketData.device && ticketData.diagnosticInfo.trim() && ticketData.restaurant ? "bg-blue-500" : "bg-gray-300"} ${ticketData.title.trim() && ticketData.device && ticketData.diagnosticInfo.trim() && ticketData.restaurant ? "animate-pulse" : ""}`}
+          onPress={handleSubmit}
+          disabled={
+            !ticketData.title.trim() ||
+            !ticketData.device ||
+            !ticketData.diagnosticInfo.trim() ||
+            !ticketData.restaurant
+          }
+        >
+          <Text className="text-white text-center font-semibold">
+            Submit Ticket
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
   };
 
   return (
