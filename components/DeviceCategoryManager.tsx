@@ -2,45 +2,48 @@ import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
-  FlatList,
-  Alert,
-  ActivityIndicator,
   Modal,
+  TextInput,
+  FlatList,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
-import { ArrowLeft, Edit, Plus, Trash } from "lucide-react-native";
 import { supabase } from "../lib/supabase";
+import { Tag, Plus, X, Search } from "lucide-react-native";
+import { useRouter } from "expo-router";
 
-interface DeviceCategory {
-  id: string;
-  name: string;
-  description: string;
-}
+type DeviceCategoryManagerProps = {
+  selectedCategory: string | null;
+  onSelectCategory: (categoryId: string, categoryName: string) => void;
+};
 
-interface DeviceCategoryManagerProps {
-  onClose: () => void;
-  onCategorySelected?: (category: DeviceCategory) => void;
-  selectionMode?: boolean;
-}
-
-const DeviceCategoryManager = ({
-  onClose,
-  onCategorySelected,
-  selectionMode = false,
-}: DeviceCategoryManagerProps) => {
-  const [categories, setCategories] = useState<DeviceCategory[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [editingCategory, setEditingCategory] = useState<DeviceCategory | null>(
-    null,
-  );
-  const [categoryName, setCategoryName] = useState("");
-  const [categoryDescription, setCategoryDescription] = useState("");
+export default function DeviceCategoryManager({
+  selectedCategory,
+  onSelectCategory,
+}: DeviceCategoryManagerProps) {
+  const router = useRouter();
+  const [showModal, setShowModal] = useState(false);
+  const [categories, setCategories] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filteredCategories, setFilteredCategories] = useState<any[]>([]);
+  const [selectedCategoryName, setSelectedCategoryName] = useState("");
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newCategory, setNewCategory] = useState({
+    name: "",
+    description: "",
+  });
 
   useEffect(() => {
-    fetchCategories();
-  }, []);
+    if (showModal) {
+      fetchCategories();
+    }
+  }, [showModal]);
+
+  useEffect(() => {
+    filterCategories();
+  }, [searchQuery, categories]);
 
   const fetchCategories = async () => {
     try {
@@ -52,7 +55,17 @@ const DeviceCategoryManager = ({
 
       if (error) throw error;
 
-      setCategories(data || []);
+      if (data) {
+        setCategories(data);
+
+        // Find the name of the selected category
+        if (selectedCategory) {
+          const category = data.find((cat) => cat.id === selectedCategory);
+          if (category) {
+            setSelectedCategoryName(category.name);
+          }
+        }
+      }
     } catch (error) {
       console.error("Error fetching categories:", error);
       Alert.alert("Error", "Failed to load device categories");
@@ -61,216 +74,228 @@ const DeviceCategoryManager = ({
     }
   };
 
-  const handleAddCategory = () => {
-    setEditingCategory(null);
-    setCategoryName("");
-    setCategoryDescription("");
-    setModalVisible(true);
-  };
+  const filterCategories = () => {
+    if (!searchQuery) {
+      setFilteredCategories(categories);
+      return;
+    }
 
-  const handleEditCategory = (category: DeviceCategory) => {
-    setEditingCategory(category);
-    setCategoryName(category.name);
-    setCategoryDescription(category.description || "");
-    setModalVisible(true);
-  };
-
-  const handleDeleteCategory = async (categoryId: string) => {
-    Alert.alert(
-      "Confirm Delete",
-      "Are you sure you want to delete this category? This may affect devices assigned to this category.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              const { error } = await supabase
-                .from("device_categories")
-                .delete()
-                .eq("id", categoryId);
-
-              if (error) throw error;
-
-              // Refresh the list
-              fetchCategories();
-              Alert.alert("Success", "Category deleted successfully");
-            } catch (error) {
-              console.error("Error deleting category:", error);
-              Alert.alert(
-                "Error",
-                "Failed to delete category. It may be in use by devices.",
-              );
-            }
-          },
-        },
-      ],
+    const query = searchQuery.toLowerCase();
+    const filtered = categories.filter(
+      (category) =>
+        category.name.toLowerCase().includes(query) ||
+        category.description?.toLowerCase().includes(query),
     );
+
+    setFilteredCategories(filtered);
   };
 
-  const handleSaveCategory = async () => {
-    if (!categoryName.trim()) {
+  const handleAddCategory = async () => {
+    if (!newCategory.name) {
       Alert.alert("Error", "Category name is required");
       return;
     }
 
     try {
-      if (editingCategory) {
-        // Update existing category
-        const { error } = await supabase
-          .from("device_categories")
-          .update({
-            name: categoryName,
-            description: categoryDescription,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", editingCategory.id);
+      const { data, error } = await supabase
+        .from("device_categories")
+        .insert([
+          {
+            name: newCategory.name,
+            description: newCategory.description || null,
+          },
+        ])
+        .select();
 
-        if (error) throw error;
-        Alert.alert("Success", "Category updated successfully");
-      } else {
-        // Create new category
-        const { error } = await supabase.from("device_categories").insert({
-          name: categoryName,
-          description: categoryDescription,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+      if (error) throw error;
+
+      if (data && data[0]) {
+        Alert.alert("Success", "Category added successfully");
+        setShowAddModal(false);
+        setNewCategory({
+          name: "",
+          description: "",
         });
+        fetchCategories();
 
-        if (error) throw error;
-        Alert.alert("Success", "Category created successfully");
+        // Select the newly created category
+        onSelectCategory(data[0].id, data[0].name);
+        setSelectedCategoryName(data[0].name);
+        setShowModal(false);
       }
-
-      // Close modal and refresh list
-      setModalVisible(false);
-      fetchCategories();
     } catch (error) {
-      console.error("Error saving category:", error);
-      Alert.alert("Error", "Failed to save category");
+      console.error("Error adding category:", error);
+      Alert.alert("Error", "Failed to add category");
     }
   };
 
-  const renderCategoryItem = ({ item }: { item: DeviceCategory }) => (
+  const renderCategoryItem = ({ item }: { item: any }) => (
     <TouchableOpacity
-      className="bg-white p-4 mb-2 rounded-lg border border-gray-200 flex-row justify-between items-center"
+      className={`p-4 border-b border-gray-100 ${selectedCategory === item.id ? "bg-blue-50" : ""}`}
       onPress={() => {
-        if (selectionMode && onCategorySelected) {
-          onCategorySelected(item);
-        }
+        onSelectCategory(item.id, item.name);
+        setSelectedCategoryName(item.name);
+        setShowModal(false);
       }}
     >
-      <View className="flex-1">
-        <Text className="font-bold text-lg">{item.name}</Text>
-        {item.description ? (
-          <Text className="text-gray-600 mt-1">{item.description}</Text>
-        ) : null}
-      </View>
-
-      {!selectionMode && (
-        <View className="flex-row">
-          <TouchableOpacity
-            className="p-2 mr-2"
-            onPress={() => handleEditCategory(item)}
-          >
-            <Edit size={20} color="#3b82f6" />
-          </TouchableOpacity>
-          <TouchableOpacity
-            className="p-2"
-            onPress={() => handleDeleteCategory(item.id)}
-          >
-            <Trash size={20} color="#ef4444" />
-          </TouchableOpacity>
+      <View className="flex-row items-center">
+        <View className="bg-blue-100 w-10 h-10 rounded-full items-center justify-center mr-3">
+          <Tag size={20} color="#1e40af" />
         </View>
-      )}
+        <View>
+          <Text className="font-bold text-gray-800">{item.name}</Text>
+          {item.description && (
+            <Text className="text-gray-500 text-sm">{item.description}</Text>
+          )}
+        </View>
+      </View>
     </TouchableOpacity>
   );
 
   return (
-    <View className="flex-1 bg-gray-50 p-4">
-      {/* Header */}
-      <View className="flex-row justify-between items-center mb-4">
+    <View>
+      <Text className="text-gray-700 mb-1 font-medium">Category *</Text>
+      <TouchableOpacity
+        className="flex-row justify-between items-center border border-gray-300 rounded-lg px-3 py-2"
+        onPress={() => setShowModal(true)}
+      >
         <View className="flex-row items-center">
-          <TouchableOpacity onPress={onClose} className="mr-2">
-            <ArrowLeft size={24} color="#1e40af" />
-          </TouchableOpacity>
-          <Text className="text-2xl font-bold">Device Categories</Text>
+          <Tag size={20} color="#6b7280" className="mr-2" />
+          <Text
+            className={selectedCategory ? "text-gray-800" : "text-gray-400"}
+          >
+            {selectedCategoryName || "Select a category"}
+          </Text>
         </View>
-        <TouchableOpacity
-          className="bg-blue-500 p-2 rounded-full"
-          onPress={handleAddCategory}
-        >
-          <Plus size={20} color="white" />
-        </TouchableOpacity>
-      </View>
+        <Text className="text-gray-500">▼</Text>
+      </TouchableOpacity>
 
-      {/* Category List */}
-      {loading ? (
-        <View className="flex-1 justify-center items-center">
-          <ActivityIndicator size="large" color="#1e40af" />
-          <Text className="mt-2 text-gray-600">Loading categories...</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={categories}
-          renderItem={renderCategoryItem}
-          keyExtractor={(item) => item.id}
-          ListEmptyComponent={
-            <View className="items-center justify-center py-10">
-              <Text className="text-gray-500">
-                No device categories found. Add one to get started.
-              </Text>
-            </View>
-          }
-        />
-      )}
-
-      {/* Add/Edit Category Modal */}
+      {/* Category Selection Modal */}
       <Modal
-        visible={modalVisible}
+        visible={showModal}
         transparent={true}
         animationType="slide"
-        onRequestClose={() => setModalVisible(false)}
+        onRequestClose={() => setShowModal(false)}
       >
-        <View className="flex-1 justify-center items-center bg-black bg-opacity-50">
-          <View className="bg-white p-6 rounded-xl w-[90%] max-w-md">
-            <Text className="text-xl font-bold mb-4">
-              {editingCategory ? "Edit Category" : "Add New Category"}
-            </Text>
-
-            <Text className="font-medium mb-1">Category Name</Text>
-            <TextInput
-              className="border border-gray-300 rounded-lg p-3 mb-4 bg-white"
-              placeholder="Enter category name"
-              value={categoryName}
-              onChangeText={setCategoryName}
-            />
-
-            <Text className="font-medium mb-1">Description (Optional)</Text>
-            <TextInput
-              className="border border-gray-300 rounded-lg p-3 mb-6 bg-white h-24"
-              placeholder="Enter description"
-              multiline
-              textAlignVertical="top"
-              value={categoryDescription}
-              onChangeText={setCategoryDescription}
-            />
-
-            <View className="flex-row justify-between">
-              <TouchableOpacity
-                className="bg-gray-200 py-3 px-4 rounded-lg flex-1 mr-2"
-                onPress={() => setModalVisible(false)}
-              >
-                <Text className="text-gray-800 text-center font-medium">
-                  Cancel
-                </Text>
+        <View className="flex-1 bg-black bg-opacity-50 justify-end">
+          <View className="bg-white rounded-t-3xl max-h-[80%]">
+            <View className="p-4 border-b border-gray-200 flex-row justify-between items-center">
+              <Text className="text-xl font-bold text-center text-blue-800">
+                Select Category
+              </Text>
+              <TouchableOpacity onPress={() => setShowModal(false)}>
+                <X size={24} color="#4b5563" />
               </TouchableOpacity>
+            </View>
+
+            <View className="p-4">
+              <View className="flex-row items-center bg-gray-100 rounded-xl px-4 py-3 mb-4">
+                <Search size={20} color="#4b5563" />
+                <TextInput
+                  className="flex-1 ml-3 py-1"
+                  placeholder="Search categories..."
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  placeholderTextColor="#9ca3af"
+                />
+              </View>
+
               <TouchableOpacity
-                className="bg-blue-500 py-3 px-4 rounded-lg flex-1 ml-2"
-                onPress={handleSaveCategory}
+                className="flex-row items-center justify-center bg-blue-600 rounded-lg p-3 mb-4"
+                onPress={() => setShowAddModal(true)}
               >
-                <Text className="text-white text-center font-medium">
-                  {editingCategory ? "Update" : "Save"}
+                <Plus size={20} color="white" className="mr-2" />
+                <Text className="text-white font-medium">Add New Category</Text>
+              </TouchableOpacity>
+            </View>
+
+            {loading ? (
+              <View className="p-8 items-center justify-center">
+                <ActivityIndicator size="large" color="#1e40af" />
+                <Text className="mt-2 text-gray-500">
+                  Loading categories...
+                </Text>
+              </View>
+            ) : filteredCategories.length > 0 ? (
+              <FlatList
+                data={filteredCategories}
+                renderItem={renderCategoryItem}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={{ paddingBottom: 20 }}
+              />
+            ) : (
+              <View className="p-8 items-center justify-center">
+                <Text className="text-gray-500 text-center">
+                  No categories found. Add a new category to continue.
+                </Text>
+              </View>
+            )}
+
+            <TouchableOpacity
+              className="p-4 bg-gray-100 items-center"
+              onPress={() => router.push("/devices/categories")}
+            >
+              <Text className="text-blue-600 font-medium">
+                Manage All Categories
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Add Category Modal */}
+      <Modal
+        visible={showAddModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowAddModal(false)}
+      >
+        <View className="flex-1 bg-black bg-opacity-50 justify-end">
+          <View className="bg-white rounded-t-3xl p-6">
+            <View className="flex-row justify-between items-center mb-6">
+              <Text className="text-xl font-bold text-gray-800">
+                Add New Category
+              </Text>
+              <TouchableOpacity onPress={() => setShowAddModal(false)}>
+                <X size={24} color="#4b5563" />
+              </TouchableOpacity>
+            </View>
+
+            <View className="space-y-4">
+              <View>
+                <Text className="text-gray-700 mb-1 font-medium">Name *</Text>
+                <TextInput
+                  className="border border-gray-300 rounded-lg px-3 py-2"
+                  placeholder="Enter category name"
+                  value={newCategory.name}
+                  onChangeText={(text) =>
+                    setNewCategory({ ...newCategory, name: text })
+                  }
+                />
+              </View>
+
+              <View>
+                <Text className="text-gray-700 mb-1 font-medium">
+                  Description
+                </Text>
+                <TextInput
+                  className="border border-gray-300 rounded-lg px-3 py-2 h-24"
+                  placeholder="Enter category description"
+                  value={newCategory.description}
+                  onChangeText={(text) =>
+                    setNewCategory({ ...newCategory, description: text })
+                  }
+                  multiline
+                  textAlignVertical="top"
+                />
+              </View>
+
+              <TouchableOpacity
+                className="bg-blue-600 py-3 rounded-lg items-center mt-4"
+                onPress={handleAddCategory}
+              >
+                <Text className="text-white font-bold text-lg">
+                  Add Category
                 </Text>
               </TouchableOpacity>
             </View>
@@ -279,6 +304,4 @@ const DeviceCategoryManager = ({
       </Modal>
     </View>
   );
-};
-
-export default DeviceCategoryManager;
+}

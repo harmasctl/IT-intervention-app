@@ -18,159 +18,161 @@ import {
   Edit,
   Trash2,
   X,
-  Tag,
   Search,
+  Tag,
 } from "lucide-react-native";
 import { supabase } from "../../lib/supabase";
+import EquipmentTabs from "../../components/EquipmentTabs";
 
-type DeviceCategory = {
+type EquipmentType = {
   id: string;
   name: string;
   description?: string;
   created_at: string;
 };
 
-export default function DeviceCategoriesScreen() {
+export default function EquipmentTypesScreen() {
   const router = useRouter();
-  const [categories, setCategories] = useState<DeviceCategory[]>([]);
-  const [filteredCategories, setFilteredCategories] = useState<
-    DeviceCategory[]
-  >([]);
+  const [types, setTypes] = useState<EquipmentType[]>([]);
+  const [filteredTypes, setFilteredTypes] = useState<EquipmentType[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [currentCategory, setCurrentCategory] = useState<DeviceCategory | null>(
-    null,
-  );
-  const [newCategory, setNewCategory] = useState({
+  const [currentType, setCurrentType] = useState<EquipmentType | null>(null);
+  const [newType, setNewType] = useState({
     name: "",
     description: "",
   });
 
   useEffect(() => {
-    fetchCategories();
+    fetchTypes();
 
-    // Set up real-time subscription for category changes
-    const categorySubscription = supabase
-      .channel("category-changes")
+    // Set up real-time subscription for type changes
+    const typeSubscription = supabase
+      .channel("type-changes")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "device_categories" },
+        { event: "*", schema: "public", table: "equipment_types" },
         (payload) => {
-          console.log("Category change received:", payload);
-          fetchCategories();
+          console.log("Equipment type change received:", payload);
+          fetchTypes();
         },
       )
       .subscribe();
 
     return () => {
-      categorySubscription.unsubscribe();
+      typeSubscription.unsubscribe();
     };
   }, []);
 
   useEffect(() => {
-    filterCategories();
-  }, [searchQuery, categories]);
+    filterTypes();
+  }, [searchQuery, types]);
 
-  const fetchCategories = async () => {
+  const fetchTypes = async () => {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from("device_categories")
+        .from("equipment_types")
         .select("*")
         .order("name");
 
       if (error) throw error;
 
       if (data) {
-        setCategories(data);
+        setTypes(data);
+        setFilteredTypes(data);
       }
     } catch (error) {
-      console.error("Error fetching categories:", error);
-      Alert.alert("Error", "Failed to load device categories");
+      console.error("Error fetching equipment types:", error);
+      Alert.alert("Error", "Failed to load equipment types");
     } finally {
       setLoading(false);
     }
   };
 
-  const filterCategories = () => {
+  const filterTypes = () => {
     if (!searchQuery) {
-      setFilteredCategories(categories);
+      setFilteredTypes(types);
       return;
     }
 
     const query = searchQuery.toLowerCase();
-    const filtered = categories.filter(
-      (category) =>
-        category.name.toLowerCase().includes(query) ||
-        category.description?.toLowerCase().includes(query),
+    const filtered = types.filter(
+      (type) =>
+        type.name.toLowerCase().includes(query) ||
+        type.description?.toLowerCase().includes(query),
     );
 
-    setFilteredCategories(filtered);
+    setFilteredTypes(filtered);
   };
 
-  const handleAddCategory = async () => {
-    if (!newCategory.name) {
-      Alert.alert("Error", "Category name is required");
+  const handleAddType = async () => {
+    if (!newType.name) {
+      Alert.alert("Error", "Type name is required");
       return;
     }
 
     try {
-      const { data, error } = await supabase.from("device_categories").insert([
-        {
-          name: newCategory.name,
-          description: newCategory.description || null,
-        },
-      ]);
+      const { data, error } = await supabase
+        .from("equipment_types")
+        .insert([
+          {
+            name: newType.name,
+            description: newType.description || null,
+          },
+        ])
+        .select();
 
       if (error) throw error;
 
-      Alert.alert("Success", "Category added successfully");
+      Alert.alert("Success", "Equipment type added successfully");
       setShowAddModal(false);
-      setNewCategory({
+      setNewType({
         name: "",
         description: "",
       });
-      fetchCategories();
+      fetchTypes();
     } catch (error) {
-      console.error("Error adding category:", error);
-      Alert.alert("Error", "Failed to add category");
+      console.error("Error adding equipment type:", error);
+      Alert.alert("Error", "Failed to add equipment type");
     }
   };
 
-  const handleEditCategory = async () => {
-    if (!currentCategory) return;
-    if (!currentCategory.name) {
-      Alert.alert("Error", "Category name is required");
+  const handleEditType = async () => {
+    if (!currentType) return;
+    if (!currentType.name) {
+      Alert.alert("Error", "Type name is required");
       return;
     }
 
     try {
       const { error } = await supabase
-        .from("device_categories")
+        .from("equipment_types")
         .update({
-          name: currentCategory.name,
-          description: currentCategory.description || null,
+          name: currentType.name,
+          description: currentType.description || null,
+          updated_at: new Date().toISOString(),
         })
-        .eq("id", currentCategory.id);
+        .eq("id", currentType.id);
 
       if (error) throw error;
 
-      Alert.alert("Success", "Category updated successfully");
+      Alert.alert("Success", "Equipment type updated successfully");
       setShowEditModal(false);
-      setCurrentCategory(null);
-      fetchCategories();
+      setCurrentType(null);
+      fetchTypes();
     } catch (error) {
-      console.error("Error updating category:", error);
-      Alert.alert("Error", "Failed to update category");
+      console.error("Error updating equipment type:", error);
+      Alert.alert("Error", "Failed to update equipment type");
     }
   };
 
-  const handleDeleteCategory = async (categoryId: string) => {
+  const handleDeleteType = async (typeId: string) => {
     Alert.alert(
       "Confirm Delete",
-      "Are you sure you want to delete this category? This will affect all devices in this category.",
+      "Are you sure you want to delete this equipment type? This will affect all equipment of this type.",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -179,17 +181,17 @@ export default function DeviceCategoriesScreen() {
           onPress: async () => {
             try {
               const { error } = await supabase
-                .from("device_categories")
+                .from("equipment_types")
                 .delete()
-                .eq("id", categoryId);
+                .eq("id", typeId);
 
               if (error) throw error;
 
-              Alert.alert("Success", "Category deleted successfully");
-              fetchCategories();
+              Alert.alert("Success", "Equipment type deleted successfully");
+              fetchTypes();
             } catch (error) {
-              console.error("Error deleting category:", error);
-              Alert.alert("Error", "Failed to delete category");
+              console.error("Error deleting equipment type:", error);
+              Alert.alert("Error", "Failed to delete equipment type");
             }
           },
         },
@@ -197,7 +199,7 @@ export default function DeviceCategoriesScreen() {
     );
   };
 
-  const renderCategoryItem = ({ item }: { item: DeviceCategory }) => (
+  const renderTypeItem = ({ item }: { item: EquipmentType }) => (
     <View className="bg-white rounded-xl p-4 mb-4 shadow-sm">
       <View className="flex-row justify-between items-start">
         <View className="flex-row items-center">
@@ -215,13 +217,13 @@ export default function DeviceCategoriesScreen() {
           <TouchableOpacity
             className="mr-3"
             onPress={() => {
-              setCurrentCategory(item);
+              setCurrentType(item);
               setShowEditModal(true);
             }}
           >
             <Edit size={20} color="#1e40af" />
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => handleDeleteCategory(item.id)}>
+          <TouchableOpacity onPress={() => handleDeleteType(item.id)}>
             <Trash2 size={20} color="#ef4444" />
           </TouchableOpacity>
         </View>
@@ -239,7 +241,7 @@ export default function DeviceCategoriesScreen() {
           <ArrowLeft size={24} color="white" />
         </TouchableOpacity>
         <Text className="text-2xl font-bold text-white flex-1">
-          Device Categories
+          Equipment Types
         </Text>
         <TouchableOpacity
           className="bg-green-600 p-2 rounded-full"
@@ -255,7 +257,7 @@ export default function DeviceCategoriesScreen() {
           <Search size={20} color="#4b5563" />
           <TextInput
             className="flex-1 ml-3 py-1 text-base"
-            placeholder="Search categories..."
+            placeholder="Search equipment types..."
             value={searchQuery}
             onChangeText={setSearchQuery}
             placeholderTextColor="#9ca3af"
@@ -263,40 +265,44 @@ export default function DeviceCategoriesScreen() {
         </View>
       </View>
 
-      {/* Category List */}
+      {/* Type List */}
       <View className="flex-1 px-4 pt-4">
         {loading ? (
           <View className="flex-1 justify-center items-center">
             <ActivityIndicator size="large" color="#1e40af" />
-            <Text className="mt-2 text-gray-600">Loading categories...</Text>
+            <Text className="mt-2 text-gray-600">
+              Loading equipment types...
+            </Text>
           </View>
-        ) : filteredCategories.length > 0 ? (
+        ) : filteredTypes.length > 0 ? (
           <FlatList
-            data={filteredCategories}
-            renderItem={renderCategoryItem}
+            data={filteredTypes}
+            renderItem={renderTypeItem}
             keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: 20 }}
             refreshing={loading}
-            onRefresh={fetchCategories}
+            onRefresh={fetchTypes}
           />
         ) : (
           <View className="flex-1 justify-center items-center">
             <Tag size={48} color="#9ca3af" />
             <Text className="mt-4 text-gray-500 text-center">
-              No categories found
+              No equipment types found
             </Text>
             <TouchableOpacity
               className="mt-4 bg-blue-600 px-4 py-2 rounded-lg"
               onPress={() => setShowAddModal(true)}
             >
-              <Text className="text-white font-medium">Add New Category</Text>
+              <Text className="text-white font-medium">
+                Add New Equipment Type
+              </Text>
             </TouchableOpacity>
           </View>
         )}
       </View>
 
-      {/* Add Category Modal */}
+      {/* Add Type Modal */}
       <Modal
         visible={showAddModal}
         transparent={true}
@@ -307,7 +313,7 @@ export default function DeviceCategoriesScreen() {
           <View className="bg-white rounded-t-3xl p-6">
             <View className="flex-row justify-between items-center mb-6">
               <Text className="text-xl font-bold text-gray-800">
-                Add New Category
+                Add New Equipment Type
               </Text>
               <TouchableOpacity onPress={() => setShowAddModal(false)}>
                 <X size={24} color="#4b5563" />
@@ -319,10 +325,10 @@ export default function DeviceCategoriesScreen() {
                 <Text className="text-gray-700 mb-1 font-medium">Name *</Text>
                 <TextInput
                   className="border border-gray-300 rounded-lg px-3 py-2"
-                  placeholder="Enter category name"
-                  value={newCategory.name}
+                  placeholder="Enter equipment type name"
+                  value={newType.name}
                   onChangeText={(text) =>
-                    setNewCategory({ ...newCategory, name: text })
+                    setNewType({ ...newType, name: text })
                   }
                 />
               </View>
@@ -333,10 +339,10 @@ export default function DeviceCategoriesScreen() {
                 </Text>
                 <TextInput
                   className="border border-gray-300 rounded-lg px-3 py-2 h-24"
-                  placeholder="Enter category description"
-                  value={newCategory.description}
+                  placeholder="Enter equipment type description"
+                  value={newType.description}
                   onChangeText={(text) =>
-                    setNewCategory({ ...newCategory, description: text })
+                    setNewType({ ...newType, description: text })
                   }
                   multiline
                   textAlignVertical="top"
@@ -345,10 +351,10 @@ export default function DeviceCategoriesScreen() {
 
               <TouchableOpacity
                 className="bg-blue-600 py-3 rounded-lg items-center mt-4"
-                onPress={handleAddCategory}
+                onPress={handleAddType}
               >
                 <Text className="text-white font-bold text-lg">
-                  Add Category
+                  Add Equipment Type
                 </Text>
               </TouchableOpacity>
             </View>
@@ -356,7 +362,7 @@ export default function DeviceCategoriesScreen() {
         </View>
       </Modal>
 
-      {/* Edit Category Modal */}
+      {/* Edit Type Modal */}
       <Modal
         visible={showEditModal}
         transparent={true}
@@ -367,23 +373,23 @@ export default function DeviceCategoriesScreen() {
           <View className="bg-white rounded-t-3xl p-6">
             <View className="flex-row justify-between items-center mb-6">
               <Text className="text-xl font-bold text-gray-800">
-                Edit Category
+                Edit Equipment Type
               </Text>
               <TouchableOpacity onPress={() => setShowEditModal(false)}>
                 <X size={24} color="#4b5563" />
               </TouchableOpacity>
             </View>
 
-            {currentCategory && (
+            {currentType && (
               <View className="space-y-4">
                 <View>
                   <Text className="text-gray-700 mb-1 font-medium">Name *</Text>
                   <TextInput
                     className="border border-gray-300 rounded-lg px-3 py-2"
-                    placeholder="Enter category name"
-                    value={currentCategory.name}
+                    placeholder="Enter equipment type name"
+                    value={currentType.name}
                     onChangeText={(text) =>
-                      setCurrentCategory({ ...currentCategory, name: text })
+                      setCurrentType({ ...currentType, name: text })
                     }
                   />
                 </View>
@@ -394,13 +400,10 @@ export default function DeviceCategoriesScreen() {
                   </Text>
                   <TextInput
                     className="border border-gray-300 rounded-lg px-3 py-2 h-24"
-                    placeholder="Enter category description"
-                    value={currentCategory.description || ""}
+                    placeholder="Enter equipment type description"
+                    value={currentType.description || ""}
                     onChangeText={(text) =>
-                      setCurrentCategory({
-                        ...currentCategory,
-                        description: text,
-                      })
+                      setCurrentType({ ...currentType, description: text })
                     }
                     multiline
                     textAlignVertical="top"
@@ -409,10 +412,10 @@ export default function DeviceCategoriesScreen() {
 
                 <TouchableOpacity
                   className="bg-blue-600 py-3 rounded-lg items-center mt-4"
-                  onPress={handleEditCategory}
+                  onPress={handleEditType}
                 >
                   <Text className="text-white font-bold text-lg">
-                    Update Category
+                    Update Equipment Type
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -420,6 +423,9 @@ export default function DeviceCategoriesScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Bottom Tabs */}
+      <EquipmentTabs activeTab="types" />
     </SafeAreaView>
   );
 }

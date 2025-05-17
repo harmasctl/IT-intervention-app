@@ -4,38 +4,78 @@ import {
   Text,
   TouchableOpacity,
   FlatList,
+  ActivityIndicator,
   TextInput,
   Alert,
-  ActivityIndicator,
   Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { useRouter } from "expo-router";
-import { Plus, Search, Edit, Trash, Upload } from "lucide-react-native";
+import {
+  Search,
+  Plus,
+  Building2,
+  MapPin,
+  Phone,
+  Mail,
+  ChevronRight,
+  X,
+} from "lucide-react-native";
 import { supabase } from "../../lib/supabase";
 
 type Restaurant = {
   id: string;
   name: string;
+  address?: string;
+  city?: string;
+  phone?: string;
+  email?: string;
   created_at: string;
 };
 
 export default function RestaurantsScreen() {
   const router = useRouter();
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
+  const [filteredRestaurants, setFilteredRestaurants] = useState<Restaurant[]>(
+    [],
+  );
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [showEditForm, setShowEditForm] = useState(false);
-  const [showBulkImport, setShowBulkImport] = useState(false);
-  const [bulkImportText, setBulkImportText] = useState("");
-  const [selectedRestaurant, setSelectedRestaurant] =
-    useState<Restaurant | null>(null);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newRestaurant, setNewRestaurant] = useState({
+    id: "",
+    name: "",
+    address: "",
+    city: "",
+    phone: "",
+    email: "",
+  });
 
   useEffect(() => {
     fetchRestaurants();
+
+    // Set up real-time subscription for restaurant changes
+    const restaurantSubscription = supabase
+      .channel("restaurant-changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "restaurants" },
+        (payload) => {
+          console.log("Restaurant change received:", payload);
+          fetchRestaurants();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      restaurantSubscription.unsubscribe();
+    };
   }, []);
+
+  useEffect(() => {
+    filterRestaurants();
+  }, [searchQuery, restaurants]);
 
   const fetchRestaurants = async () => {
     try {
@@ -48,7 +88,7 @@ export default function RestaurantsScreen() {
       if (error) throw error;
 
       if (data) {
-        setRestaurants(data as Restaurant[]);
+        setRestaurants(data);
       }
     } catch (error) {
       console.error("Error fetching restaurants:", error);
@@ -58,345 +98,296 @@ export default function RestaurantsScreen() {
     }
   };
 
-  const handleAddRestaurant = () => {
-    setSelectedRestaurant(null);
-    setShowAddForm(true);
+  const filterRestaurants = () => {
+    if (!searchQuery) {
+      setFilteredRestaurants(restaurants);
+      return;
+    }
+
+    const query = searchQuery.toLowerCase();
+    const filtered = restaurants.filter(
+      (restaurant) =>
+        restaurant.name.toLowerCase().includes(query) ||
+        restaurant.city?.toLowerCase().includes(query) ||
+        restaurant.address?.toLowerCase().includes(query),
+    );
+
+    setFilteredRestaurants(filtered);
   };
 
-  const handleBulkImport = () => {
-    setShowBulkImport(true);
-  };
+  const handleAddRestaurant = async () => {
+    if (!newRestaurant.name) {
+      Alert.alert("Error", "Restaurant name is required");
+      return;
+    }
 
-  const processBulkImport = async () => {
-    if (!bulkImportText.trim()) {
-      Alert.alert("Error", "Please enter restaurant names");
+    if (!newRestaurant.id) {
+      Alert.alert("Error", "Restaurant ID is required");
       return;
     }
 
     try {
-      const restaurantNames = bulkImportText
-        .split("\n")
-        .map((name) => name.trim())
-        .filter((name) => name.length > 0);
+      const { data, error } = await supabase.from("restaurants").insert([
+        {
+          id: newRestaurant.id,
+          name: newRestaurant.name,
+          address: newRestaurant.address || null,
+          city: newRestaurant.city || null,
+          phone: newRestaurant.phone || null,
+          email: newRestaurant.email || null,
+        },
+      ]);
 
-      if (restaurantNames.length === 0) {
-        Alert.alert("Error", "No valid restaurant names found");
+      if (error) {
+        if (error.code === "23505") {
+          // Unique violation
+          Alert.alert("Error", "A restaurant with this ID already exists");
+        } else {
+          throw error;
+        }
         return;
       }
 
-      const restaurantsToInsert = restaurantNames.map((name) => ({
-        name,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }));
-
-      const { data, error } = await supabase
-        .from("restaurants")
-        .insert(restaurantsToInsert);
-
-      if (error) throw error;
-
-      Alert.alert(
-        "Success",
-        `${restaurantNames.length} restaurants imported successfully`,
-      );
-      setShowBulkImport(false);
-      setBulkImportText("");
+      Alert.alert("Success", "Restaurant added successfully");
+      setShowAddModal(false);
+      setNewRestaurant({
+        id: "",
+        name: "",
+        address: "",
+        city: "",
+        phone: "",
+        email: "",
+      });
       fetchRestaurants();
     } catch (error) {
-      console.error("Error importing restaurants:", error);
-      Alert.alert("Error", "Failed to import restaurants");
+      console.error("Error adding restaurant:", error);
+      Alert.alert("Error", "Failed to add restaurant");
     }
   };
 
-  const handleEditRestaurant = (restaurant: Restaurant) => {
-    setSelectedRestaurant(restaurant);
-    setShowEditForm(true);
+  const handleRestaurantPress = (restaurant: Restaurant) => {
+    router.push(`/restaurants/${restaurant.id}`);
   };
-
-  const handleDeleteRestaurant = async (id: string) => {
-    Alert.alert(
-      "Confirm Delete",
-      "Are you sure you want to delete this restaurant? This will also affect all associated devices and tickets.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              const { error } = await supabase
-                .from("restaurants")
-                .delete()
-                .eq("id", id);
-
-              if (error) throw error;
-
-              Alert.alert("Success", "Restaurant deleted successfully");
-              fetchRestaurants();
-            } catch (error) {
-              console.error("Error deleting restaurant:", error);
-              Alert.alert(
-                "Error",
-                "Failed to delete restaurant. It may have associated devices or tickets.",
-              );
-            }
-          },
-        },
-      ],
-    );
-  };
-
-  const handleFormSubmit = async (formData: any, isEdit = false) => {
-    try {
-      if (isEdit && selectedRestaurant) {
-        // Update existing restaurant
-        const { error } = await supabase
-          .from("restaurants")
-          .update({
-            name: formData.name,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", selectedRestaurant.id);
-
-        if (error) throw error;
-        Alert.alert("Success", "Restaurant updated successfully");
-      } else {
-        // Create new restaurant
-        const { error } = await supabase.from("restaurants").insert({
-          name: formData.name,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        });
-
-        if (error) throw error;
-        Alert.alert("Success", "Restaurant created successfully");
-      }
-
-      setShowAddForm(false);
-      setShowEditForm(false);
-      fetchRestaurants();
-    } catch (error) {
-      console.error("Error saving restaurant:", error);
-      Alert.alert("Error", "Failed to save restaurant");
-    }
-  };
-
-  const filteredRestaurants = restaurants.filter((restaurant) =>
-    restaurant.name.toLowerCase().includes(searchQuery.toLowerCase()),
-  );
 
   const renderRestaurantItem = ({ item }: { item: Restaurant }) => (
-    <View className="bg-white rounded-lg p-4 mb-3 shadow-sm border border-gray-100">
-      <View className="flex-row justify-between">
-        <View className="flex-1">
-          <Text className="font-bold text-lg text-gray-800">{item.name}</Text>
+    <TouchableOpacity
+      className="bg-white rounded-xl p-4 mb-4 shadow-sm"
+      onPress={() => handleRestaurantPress(item)}
+      style={{ elevation: 2 }}
+    >
+      <View className="flex-row justify-between items-start">
+        <View className="flex-row items-center">
+          <View className="bg-blue-100 p-2 rounded-full mr-3">
+            <Building2 size={24} color="#1e40af" />
+          </View>
+          <View className="flex-1">
+            <Text className="font-bold text-lg text-gray-800">{item.name}</Text>
+            <Text className="text-gray-500 text-sm">{item.id}</Text>
+          </View>
         </View>
-        <View className="flex-row">
-          <TouchableOpacity
-            className="p-2 mr-2"
-            onPress={() => handleEditRestaurant(item)}
-          >
-            <Edit size={20} color="#3b82f6" />
-          </TouchableOpacity>
-          <TouchableOpacity
-            className="p-2"
-            onPress={() => handleDeleteRestaurant(item.id)}
-          >
-            <Trash size={20} color="#ef4444" />
-          </TouchableOpacity>
-        </View>
+        <ChevronRight size={20} color="#9ca3af" />
       </View>
-    </View>
+
+      {(item.address || item.city || item.phone) && (
+        <View className="mt-3 border-t border-gray-100 pt-3">
+          {item.address && (
+            <View className="flex-row items-center mt-1">
+              <MapPin size={14} color="#4b5563" />
+              <Text className="text-gray-500 text-sm ml-1">
+                {item.address}
+                {item.city ? `, ${item.city}` : ""}
+              </Text>
+            </View>
+          )}
+
+          {item.phone && (
+            <View className="flex-row items-center mt-1">
+              <Phone size={14} color="#4b5563" />
+              <Text className="text-gray-500 text-sm ml-1">{item.phone}</Text>
+            </View>
+          )}
+
+          {item.email && (
+            <View className="flex-row items-center mt-1">
+              <Mail size={14} color="#4b5563" />
+              <Text className="text-gray-500 text-sm ml-1">{item.email}</Text>
+            </View>
+          )}
+        </View>
+      )}
+    </TouchableOpacity>
   );
 
-  const RestaurantForm = ({
-    initialData,
-    onCancel,
-    onSubmit,
-  }: {
-    initialData?: { name: string };
-    onCancel: () => void;
-    onSubmit: (data: any) => void;
-  }) => {
-    const [name, setName] = useState(initialData?.name || "");
-
-    const handleSubmit = () => {
-      if (!name.trim()) {
-        Alert.alert("Error", "Restaurant name is required");
-        return;
-      }
-      onSubmit({ name });
-    };
-
-    return (
-      <View className="p-4">
-        <View className="flex-row justify-between items-center mb-6">
-          <Text className="text-2xl font-bold">
-            {initialData ? "Edit Restaurant" : "Add New Restaurant"}
-          </Text>
-          <TouchableOpacity onPress={onCancel}>
-            <Trash size={24} color="#666" />
-          </TouchableOpacity>
-        </View>
-
-        <View className="mb-4">
-          <Text className="text-gray-700 mb-1 font-medium">
-            Restaurant Name *
-          </Text>
-          <TextInput
-            className="border border-gray-300 rounded-lg px-3 py-2"
-            placeholder="Enter restaurant name"
-            value={name}
-            onChangeText={setName}
-          />
-        </View>
-
-        <View className="flex-row mb-4">
-          <TouchableOpacity
-            className="bg-gray-200 rounded-lg py-3 px-4 flex-1 mr-2"
-            onPress={onCancel}
-          >
-            <Text className="text-gray-700 text-center font-medium">
-              Cancel
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            className="bg-blue-500 rounded-lg py-3 px-4 flex-1 ml-2"
-            onPress={handleSubmit}
-          >
-            <Text className="text-white text-center font-medium">
-              {initialData ? "Update Restaurant" : "Add Restaurant"}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  };
-
   return (
-    <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-gray-50">
       <StatusBar style="auto" />
 
-      {showAddForm ? (
-        <RestaurantForm
-          onCancel={() => setShowAddForm(false)}
-          onSubmit={handleFormSubmit}
-        />
-      ) : showEditForm && selectedRestaurant ? (
-        <RestaurantForm
-          onCancel={() => setShowEditForm(false)}
-          onSubmit={(formData) => handleFormSubmit(formData, true)}
-          initialData={{
-            name: selectedRestaurant.name,
-          }}
-        />
-      ) : showBulkImport ? (
-        <View className="flex-1 p-4">
-          <View className="flex-row justify-between items-center mb-6">
-            <Text className="text-2xl font-bold">Bulk Import Restaurants</Text>
-            <TouchableOpacity onPress={() => setShowBulkImport(false)}>
-              <Trash size={24} color="#666" />
-            </TouchableOpacity>
-          </View>
+      {/* Header */}
+      <View className="flex-row justify-between items-center px-5 py-4 bg-gradient-to-r from-blue-700 to-blue-900 shadow-lg">
+        <Text className="text-2xl font-bold text-white">Restaurants</Text>
+        <TouchableOpacity
+          className="bg-green-600 p-2 rounded-full"
+          onPress={() => setShowAddModal(true)}
+        >
+          <Plus size={22} color="white" />
+        </TouchableOpacity>
+      </View>
 
-          <Text className="text-gray-700 mb-2">
-            Enter one restaurant name per line:
-          </Text>
+      {/* Search */}
+      <View className="p-4 bg-white shadow-sm">
+        <View className="flex-row items-center bg-gray-100 rounded-xl px-4 py-3">
+          <Search size={20} color="#4b5563" />
           <TextInput
-            className="border border-gray-300 rounded-lg p-3 mb-4 h-40"
-            placeholder="Restaurant 1\nRestaurant 2\nRestaurant 3"
-            multiline
-            textAlignVertical="top"
-            value={bulkImportText}
-            onChangeText={setBulkImportText}
+            className="flex-1 ml-3 py-1 text-base"
+            placeholder="Search restaurants..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholderTextColor="#9ca3af"
           />
+        </View>
+      </View>
 
-          <View className="flex-row mb-4">
+      {/* Restaurant List */}
+      <View className="flex-1 px-4 pt-4">
+        {loading ? (
+          <View className="flex-1 justify-center items-center">
+            <ActivityIndicator size="large" color="#1e40af" />
+            <Text className="mt-2 text-gray-600">Loading restaurants...</Text>
+          </View>
+        ) : filteredRestaurants.length > 0 ? (
+          <FlatList
+            data={filteredRestaurants}
+            renderItem={renderRestaurantItem}
+            keyExtractor={(item) => item.id}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 20 }}
+            refreshing={loading}
+            onRefresh={fetchRestaurants}
+          />
+        ) : (
+          <View className="flex-1 justify-center items-center">
+            <Building2 size={48} color="#9ca3af" />
+            <Text className="mt-4 text-gray-500 text-center">
+              No restaurants found
+            </Text>
             <TouchableOpacity
-              className="bg-gray-200 rounded-lg py-3 px-4 flex-1 mr-2"
-              onPress={() => setShowBulkImport(false)}
+              className="mt-4 bg-blue-600 px-4 py-2 rounded-lg"
+              onPress={() => setShowAddModal(true)}
             >
-              <Text className="text-gray-700 text-center font-medium">
-                Cancel
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              className="bg-blue-500 rounded-lg py-3 px-4 flex-1 ml-2"
-              onPress={processBulkImport}
-            >
-              <Text className="text-white text-center font-medium">Import</Text>
+              <Text className="text-white font-medium">Add New Restaurant</Text>
             </TouchableOpacity>
           </View>
-        </View>
-      ) : (
-        <>
-          {/* Header */}
-          <View className="flex-row justify-between items-center px-4 py-3 border-b border-gray-200">
-            <Text className="text-2xl font-bold text-blue-800">
-              Restaurants
-            </Text>
-            <View className="flex-row">
-              <TouchableOpacity
-                className="bg-green-600 p-2 rounded-full mr-2"
-                onPress={handleBulkImport}
-              >
-                <Upload size={24} color="white" />
+        )}
+      </View>
+
+      {/* Add Restaurant Modal */}
+      <Modal
+        visible={showAddModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowAddModal(false)}
+      >
+        <View className="flex-1 bg-black bg-opacity-50 justify-end">
+          <View className="bg-white rounded-t-3xl p-6">
+            <View className="flex-row justify-between items-center mb-6">
+              <Text className="text-xl font-bold text-gray-800">
+                Add New Restaurant
+              </Text>
+              <TouchableOpacity onPress={() => setShowAddModal(false)}>
+                <X size={24} color="#4b5563" />
               </TouchableOpacity>
+            </View>
+
+            <View className="space-y-4">
+              <View>
+                <Text className="text-gray-700 mb-1 font-medium">
+                  Restaurant ID *
+                </Text>
+                <TextInput
+                  className="border border-gray-300 rounded-lg px-3 py-2"
+                  placeholder="Enter restaurant ID"
+                  value={newRestaurant.id}
+                  onChangeText={(text) =>
+                    setNewRestaurant({ ...newRestaurant, id: text })
+                  }
+                />
+              </View>
+
+              <View>
+                <Text className="text-gray-700 mb-1 font-medium">Name *</Text>
+                <TextInput
+                  className="border border-gray-300 rounded-lg px-3 py-2"
+                  placeholder="Enter restaurant name"
+                  value={newRestaurant.name}
+                  onChangeText={(text) =>
+                    setNewRestaurant({ ...newRestaurant, name: text })
+                  }
+                />
+              </View>
+
+              <View>
+                <Text className="text-gray-700 mb-1 font-medium">Address</Text>
+                <TextInput
+                  className="border border-gray-300 rounded-lg px-3 py-2"
+                  placeholder="Enter address"
+                  value={newRestaurant.address}
+                  onChangeText={(text) =>
+                    setNewRestaurant({ ...newRestaurant, address: text })
+                  }
+                />
+              </View>
+
+              <View>
+                <Text className="text-gray-700 mb-1 font-medium">City</Text>
+                <TextInput
+                  className="border border-gray-300 rounded-lg px-3 py-2"
+                  placeholder="Enter city"
+                  value={newRestaurant.city}
+                  onChangeText={(text) =>
+                    setNewRestaurant({ ...newRestaurant, city: text })
+                  }
+                />
+              </View>
+
+              <View>
+                <Text className="text-gray-700 mb-1 font-medium">Phone</Text>
+                <TextInput
+                  className="border border-gray-300 rounded-lg px-3 py-2"
+                  placeholder="Enter phone number"
+                  value={newRestaurant.phone}
+                  onChangeText={(text) =>
+                    setNewRestaurant({ ...newRestaurant, phone: text })
+                  }
+                  keyboardType="phone-pad"
+                />
+              </View>
+
+              <View>
+                <Text className="text-gray-700 mb-1 font-medium">Email</Text>
+                <TextInput
+                  className="border border-gray-300 rounded-lg px-3 py-2"
+                  placeholder="Enter email"
+                  value={newRestaurant.email}
+                  onChangeText={(text) =>
+                    setNewRestaurant({ ...newRestaurant, email: text })
+                  }
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+              </View>
+
               <TouchableOpacity
-                className="bg-blue-600 p-2 rounded-full"
+                className="bg-blue-600 py-3 rounded-lg items-center mt-4"
                 onPress={handleAddRestaurant}
               >
-                <Plus size={24} color="white" />
+                <Text className="text-white font-bold text-lg">
+                  Add Restaurant
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
-
-          {/* Search */}
-          <View className="p-4">
-            <View className="flex-row items-center bg-gray-100 rounded-lg px-3 py-2 mb-3">
-              <Search size={20} color="#6b7280" />
-              <TextInput
-                className="flex-1 ml-2 py-1"
-                placeholder="Search restaurants..."
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-              />
-            </View>
-          </View>
-
-          {/* Restaurant list */}
-          <View className="flex-1 px-4 bg-gray-50">
-            {loading ? (
-              <View className="flex-1 justify-center items-center">
-                <ActivityIndicator size="large" color="#1e40af" />
-                <Text className="mt-2 text-gray-600">
-                  Loading restaurants...
-                </Text>
-              </View>
-            ) : filteredRestaurants.length > 0 ? (
-              <FlatList
-                data={filteredRestaurants}
-                renderItem={renderRestaurantItem}
-                keyExtractor={(item) => item.id}
-                showsVerticalScrollIndicator={false}
-              />
-            ) : (
-              <View className="flex-1 justify-center items-center">
-                <Text className="text-gray-500 text-center">
-                  No restaurants found
-                </Text>
-                <TouchableOpacity
-                  className="mt-4 bg-blue-600 px-4 py-2 rounded-lg"
-                  onPress={handleAddRestaurant}
-                >
-                  <Text className="text-white font-medium">Add Restaurant</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        </>
-      )}
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

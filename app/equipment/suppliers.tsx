@@ -86,55 +86,8 @@ export default function SuppliersScreen() {
 
       if (error) throw error;
 
-      if (data && data.length > 0) {
+      if (data) {
         setSuppliers(data as Supplier[]);
-      } else {
-        // If no data exists, seed with initial data
-        const initialSuppliers = [
-          {
-            name: "CoolTech Supplies",
-            contact_person: "John Smith",
-            email: "john@cooltech.com",
-            phone: "555-123-4567",
-            address: "123 Main St, Anytown, USA",
-          },
-          {
-            name: "Tech Instruments Inc.",
-            contact_person: "Sarah Johnson",
-            email: "sarah@techinstruments.com",
-            phone: "555-987-6543",
-            address: "456 Tech Blvd, Innovation City, USA",
-          },
-          {
-            name: "CleanPro Solutions",
-            contact_person: "Mike Davis",
-            email: "mike@cleanpro.com",
-            phone: "555-456-7890",
-            address: "789 Clean Ave, Sparkle Town, USA",
-          },
-          {
-            name: "ElectroParts Ltd.",
-            contact_person: "Lisa Chen",
-            email: "lisa@electroparts.com",
-            phone: "555-789-0123",
-            address: "321 Circuit Rd, Voltage City, USA",
-          },
-          {
-            name: "Kitchen Equipment Co.",
-            contact_person: "David Wilson",
-            email: "david@kitchenequip.com",
-            phone: "555-234-5678",
-            address: "567 Culinary Blvd, Foodville, USA",
-          },
-        ];
-
-        const { data: seedData, error: seedError } = await supabase
-          .from("suppliers")
-          .insert(initialSuppliers)
-          .select();
-
-        if (seedError) throw seedError;
-        if (seedData) setSuppliers(seedData as Supplier[]);
       }
     } catch (error) {
       console.error("Error fetching suppliers:", error);

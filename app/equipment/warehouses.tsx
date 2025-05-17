@@ -18,159 +18,170 @@ import {
   Edit,
   Trash2,
   X,
-  Tag,
   Search,
+  Warehouse,
+  MapPin,
 } from "lucide-react-native";
 import { supabase } from "../../lib/supabase";
+import EquipmentTabs from "../../components/EquipmentTabs";
 
-type DeviceCategory = {
+type Warehouse = {
   id: string;
   name: string;
+  location?: string;
   description?: string;
   created_at: string;
 };
 
-export default function DeviceCategoriesScreen() {
+export default function WarehousesScreen() {
   const router = useRouter();
-  const [categories, setCategories] = useState<DeviceCategory[]>([]);
-  const [filteredCategories, setFilteredCategories] = useState<
-    DeviceCategory[]
-  >([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [filteredWarehouses, setFilteredWarehouses] = useState<Warehouse[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [currentCategory, setCurrentCategory] = useState<DeviceCategory | null>(
+  const [currentWarehouse, setCurrentWarehouse] = useState<Warehouse | null>(
     null,
   );
-  const [newCategory, setNewCategory] = useState({
+  const [newWarehouse, setNewWarehouse] = useState({
     name: "",
+    location: "",
     description: "",
   });
 
   useEffect(() => {
-    fetchCategories();
+    fetchWarehouses();
 
-    // Set up real-time subscription for category changes
-    const categorySubscription = supabase
-      .channel("category-changes")
+    // Set up real-time subscription for warehouse changes
+    const warehouseSubscription = supabase
+      .channel("warehouse-changes")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "device_categories" },
+        { event: "*", schema: "public", table: "warehouses" },
         (payload) => {
-          console.log("Category change received:", payload);
-          fetchCategories();
+          console.log("Warehouse change received:", payload);
+          fetchWarehouses();
         },
       )
       .subscribe();
 
     return () => {
-      categorySubscription.unsubscribe();
+      warehouseSubscription.unsubscribe();
     };
   }, []);
 
   useEffect(() => {
-    filterCategories();
-  }, [searchQuery, categories]);
+    filterWarehouses();
+  }, [searchQuery, warehouses]);
 
-  const fetchCategories = async () => {
+  const fetchWarehouses = async () => {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from("device_categories")
+        .from("warehouses")
         .select("*")
         .order("name");
 
       if (error) throw error;
 
       if (data) {
-        setCategories(data);
+        setWarehouses(data);
+        setFilteredWarehouses(data);
       }
     } catch (error) {
-      console.error("Error fetching categories:", error);
-      Alert.alert("Error", "Failed to load device categories");
+      console.error("Error fetching warehouses:", error);
+      Alert.alert("Error", "Failed to load warehouses");
     } finally {
       setLoading(false);
     }
   };
 
-  const filterCategories = () => {
+  const filterWarehouses = () => {
     if (!searchQuery) {
-      setFilteredCategories(categories);
+      setFilteredWarehouses(warehouses);
       return;
     }
 
     const query = searchQuery.toLowerCase();
-    const filtered = categories.filter(
-      (category) =>
-        category.name.toLowerCase().includes(query) ||
-        category.description?.toLowerCase().includes(query),
+    const filtered = warehouses.filter(
+      (warehouse) =>
+        warehouse.name.toLowerCase().includes(query) ||
+        warehouse.location?.toLowerCase().includes(query) ||
+        warehouse.description?.toLowerCase().includes(query),
     );
 
-    setFilteredCategories(filtered);
+    setFilteredWarehouses(filtered);
   };
 
-  const handleAddCategory = async () => {
-    if (!newCategory.name) {
-      Alert.alert("Error", "Category name is required");
+  const handleAddWarehouse = async () => {
+    if (!newWarehouse.name) {
+      Alert.alert("Error", "Warehouse name is required");
       return;
     }
 
     try {
-      const { data, error } = await supabase.from("device_categories").insert([
-        {
-          name: newCategory.name,
-          description: newCategory.description || null,
-        },
-      ]);
+      const { data, error } = await supabase
+        .from("warehouses")
+        .insert([
+          {
+            name: newWarehouse.name,
+            location: newWarehouse.location || null,
+            description: newWarehouse.description || null,
+          },
+        ])
+        .select();
 
       if (error) throw error;
 
-      Alert.alert("Success", "Category added successfully");
+      Alert.alert("Success", "Warehouse added successfully");
       setShowAddModal(false);
-      setNewCategory({
+      setNewWarehouse({
         name: "",
+        location: "",
         description: "",
       });
-      fetchCategories();
+      fetchWarehouses();
     } catch (error) {
-      console.error("Error adding category:", error);
-      Alert.alert("Error", "Failed to add category");
+      console.error("Error adding warehouse:", error);
+      Alert.alert("Error", "Failed to add warehouse");
     }
   };
 
-  const handleEditCategory = async () => {
-    if (!currentCategory) return;
-    if (!currentCategory.name) {
-      Alert.alert("Error", "Category name is required");
+  const handleEditWarehouse = async () => {
+    if (!currentWarehouse) return;
+    if (!currentWarehouse.name) {
+      Alert.alert("Error", "Warehouse name is required");
       return;
     }
 
     try {
       const { error } = await supabase
-        .from("device_categories")
+        .from("warehouses")
         .update({
-          name: currentCategory.name,
-          description: currentCategory.description || null,
+          name: currentWarehouse.name,
+          location: currentWarehouse.location || null,
+          description: currentWarehouse.description || null,
+          updated_at: new Date().toISOString(),
         })
-        .eq("id", currentCategory.id);
+        .eq("id", currentWarehouse.id);
 
       if (error) throw error;
 
-      Alert.alert("Success", "Category updated successfully");
+      Alert.alert("Success", "Warehouse updated successfully");
       setShowEditModal(false);
-      setCurrentCategory(null);
-      fetchCategories();
+      setCurrentWarehouse(null);
+      fetchWarehouses();
     } catch (error) {
-      console.error("Error updating category:", error);
-      Alert.alert("Error", "Failed to update category");
+      console.error("Error updating warehouse:", error);
+      Alert.alert("Error", "Failed to update warehouse");
     }
   };
 
-  const handleDeleteCategory = async (categoryId: string) => {
+  const handleDeleteWarehouse = async (warehouseId: string) => {
     Alert.alert(
       "Confirm Delete",
-      "Are you sure you want to delete this category? This will affect all devices in this category.",
+      "Are you sure you want to delete this warehouse? This will affect all inventory in this warehouse.",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -179,17 +190,17 @@ export default function DeviceCategoriesScreen() {
           onPress: async () => {
             try {
               const { error } = await supabase
-                .from("device_categories")
+                .from("warehouses")
                 .delete()
-                .eq("id", categoryId);
+                .eq("id", warehouseId);
 
               if (error) throw error;
 
-              Alert.alert("Success", "Category deleted successfully");
-              fetchCategories();
+              Alert.alert("Success", "Warehouse deleted successfully");
+              fetchWarehouses();
             } catch (error) {
-              console.error("Error deleting category:", error);
-              Alert.alert("Error", "Failed to delete category");
+              console.error("Error deleting warehouse:", error);
+              Alert.alert("Error", "Failed to delete warehouse");
             }
           },
         },
@@ -197,17 +208,23 @@ export default function DeviceCategoriesScreen() {
     );
   };
 
-  const renderCategoryItem = ({ item }: { item: DeviceCategory }) => (
+  const renderWarehouseItem = ({ item }: { item: Warehouse }) => (
     <View className="bg-white rounded-xl p-4 mb-4 shadow-sm">
       <View className="flex-row justify-between items-start">
         <View className="flex-row items-center">
           <View className="bg-blue-100 p-2 rounded-full mr-3">
-            <Tag size={20} color="#1e40af" />
+            <Warehouse size={20} color="#1e40af" />
           </View>
           <View className="flex-1">
             <Text className="font-bold text-lg text-gray-800">{item.name}</Text>
+            {item.location && (
+              <View className="flex-row items-center mt-1">
+                <MapPin size={14} color="#4b5563" />
+                <Text className="text-gray-500 ml-1">{item.location}</Text>
+              </View>
+            )}
             {item.description && (
-              <Text className="text-gray-500">{item.description}</Text>
+              <Text className="text-gray-500 mt-1">{item.description}</Text>
             )}
           </View>
         </View>
@@ -215,13 +232,13 @@ export default function DeviceCategoriesScreen() {
           <TouchableOpacity
             className="mr-3"
             onPress={() => {
-              setCurrentCategory(item);
+              setCurrentWarehouse(item);
               setShowEditModal(true);
             }}
           >
             <Edit size={20} color="#1e40af" />
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => handleDeleteCategory(item.id)}>
+          <TouchableOpacity onPress={() => handleDeleteWarehouse(item.id)}>
             <Trash2 size={20} color="#ef4444" />
           </TouchableOpacity>
         </View>
@@ -238,9 +255,7 @@ export default function DeviceCategoriesScreen() {
         <TouchableOpacity onPress={() => router.back()} className="mr-4">
           <ArrowLeft size={24} color="white" />
         </TouchableOpacity>
-        <Text className="text-2xl font-bold text-white flex-1">
-          Device Categories
-        </Text>
+        <Text className="text-2xl font-bold text-white flex-1">Warehouses</Text>
         <TouchableOpacity
           className="bg-green-600 p-2 rounded-full"
           onPress={() => setShowAddModal(true)}
@@ -255,7 +270,7 @@ export default function DeviceCategoriesScreen() {
           <Search size={20} color="#4b5563" />
           <TextInput
             className="flex-1 ml-3 py-1 text-base"
-            placeholder="Search categories..."
+            placeholder="Search warehouses..."
             value={searchQuery}
             onChangeText={setSearchQuery}
             placeholderTextColor="#9ca3af"
@@ -263,40 +278,40 @@ export default function DeviceCategoriesScreen() {
         </View>
       </View>
 
-      {/* Category List */}
+      {/* Warehouse List */}
       <View className="flex-1 px-4 pt-4">
         {loading ? (
           <View className="flex-1 justify-center items-center">
             <ActivityIndicator size="large" color="#1e40af" />
-            <Text className="mt-2 text-gray-600">Loading categories...</Text>
+            <Text className="mt-2 text-gray-600">Loading warehouses...</Text>
           </View>
-        ) : filteredCategories.length > 0 ? (
+        ) : filteredWarehouses.length > 0 ? (
           <FlatList
-            data={filteredCategories}
-            renderItem={renderCategoryItem}
+            data={filteredWarehouses}
+            renderItem={renderWarehouseItem}
             keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: 20 }}
             refreshing={loading}
-            onRefresh={fetchCategories}
+            onRefresh={fetchWarehouses}
           />
         ) : (
           <View className="flex-1 justify-center items-center">
-            <Tag size={48} color="#9ca3af" />
+            <Warehouse size={48} color="#9ca3af" />
             <Text className="mt-4 text-gray-500 text-center">
-              No categories found
+              No warehouses found
             </Text>
             <TouchableOpacity
               className="mt-4 bg-blue-600 px-4 py-2 rounded-lg"
               onPress={() => setShowAddModal(true)}
             >
-              <Text className="text-white font-medium">Add New Category</Text>
+              <Text className="text-white font-medium">Add New Warehouse</Text>
             </TouchableOpacity>
           </View>
         )}
       </View>
 
-      {/* Add Category Modal */}
+      {/* Add Warehouse Modal */}
       <Modal
         visible={showAddModal}
         transparent={true}
@@ -307,7 +322,7 @@ export default function DeviceCategoriesScreen() {
           <View className="bg-white rounded-t-3xl p-6">
             <View className="flex-row justify-between items-center mb-6">
               <Text className="text-xl font-bold text-gray-800">
-                Add New Category
+                Add New Warehouse
               </Text>
               <TouchableOpacity onPress={() => setShowAddModal(false)}>
                 <X size={24} color="#4b5563" />
@@ -319,10 +334,22 @@ export default function DeviceCategoriesScreen() {
                 <Text className="text-gray-700 mb-1 font-medium">Name *</Text>
                 <TextInput
                   className="border border-gray-300 rounded-lg px-3 py-2"
-                  placeholder="Enter category name"
-                  value={newCategory.name}
+                  placeholder="Enter warehouse name"
+                  value={newWarehouse.name}
                   onChangeText={(text) =>
-                    setNewCategory({ ...newCategory, name: text })
+                    setNewWarehouse({ ...newWarehouse, name: text })
+                  }
+                />
+              </View>
+
+              <View>
+                <Text className="text-gray-700 mb-1 font-medium">Location</Text>
+                <TextInput
+                  className="border border-gray-300 rounded-lg px-3 py-2"
+                  placeholder="Enter warehouse location"
+                  value={newWarehouse.location}
+                  onChangeText={(text) =>
+                    setNewWarehouse({ ...newWarehouse, location: text })
                   }
                 />
               </View>
@@ -333,10 +360,10 @@ export default function DeviceCategoriesScreen() {
                 </Text>
                 <TextInput
                   className="border border-gray-300 rounded-lg px-3 py-2 h-24"
-                  placeholder="Enter category description"
-                  value={newCategory.description}
+                  placeholder="Enter warehouse description"
+                  value={newWarehouse.description}
                   onChangeText={(text) =>
-                    setNewCategory({ ...newCategory, description: text })
+                    setNewWarehouse({ ...newWarehouse, description: text })
                   }
                   multiline
                   textAlignVertical="top"
@@ -345,10 +372,10 @@ export default function DeviceCategoriesScreen() {
 
               <TouchableOpacity
                 className="bg-blue-600 py-3 rounded-lg items-center mt-4"
-                onPress={handleAddCategory}
+                onPress={handleAddWarehouse}
               >
                 <Text className="text-white font-bold text-lg">
-                  Add Category
+                  Add Warehouse
                 </Text>
               </TouchableOpacity>
             </View>
@@ -356,7 +383,7 @@ export default function DeviceCategoriesScreen() {
         </View>
       </Modal>
 
-      {/* Edit Category Modal */}
+      {/* Edit Warehouse Modal */}
       <Modal
         visible={showEditModal}
         transparent={true}
@@ -367,23 +394,40 @@ export default function DeviceCategoriesScreen() {
           <View className="bg-white rounded-t-3xl p-6">
             <View className="flex-row justify-between items-center mb-6">
               <Text className="text-xl font-bold text-gray-800">
-                Edit Category
+                Edit Warehouse
               </Text>
               <TouchableOpacity onPress={() => setShowEditModal(false)}>
                 <X size={24} color="#4b5563" />
               </TouchableOpacity>
             </View>
 
-            {currentCategory && (
+            {currentWarehouse && (
               <View className="space-y-4">
                 <View>
                   <Text className="text-gray-700 mb-1 font-medium">Name *</Text>
                   <TextInput
                     className="border border-gray-300 rounded-lg px-3 py-2"
-                    placeholder="Enter category name"
-                    value={currentCategory.name}
+                    placeholder="Enter warehouse name"
+                    value={currentWarehouse.name}
                     onChangeText={(text) =>
-                      setCurrentCategory({ ...currentCategory, name: text })
+                      setCurrentWarehouse({ ...currentWarehouse, name: text })
+                    }
+                  />
+                </View>
+
+                <View>
+                  <Text className="text-gray-700 mb-1 font-medium">
+                    Location
+                  </Text>
+                  <TextInput
+                    className="border border-gray-300 rounded-lg px-3 py-2"
+                    placeholder="Enter warehouse location"
+                    value={currentWarehouse.location || ""}
+                    onChangeText={(text) =>
+                      setCurrentWarehouse({
+                        ...currentWarehouse,
+                        location: text,
+                      })
                     }
                   />
                 </View>
@@ -394,11 +438,11 @@ export default function DeviceCategoriesScreen() {
                   </Text>
                   <TextInput
                     className="border border-gray-300 rounded-lg px-3 py-2 h-24"
-                    placeholder="Enter category description"
-                    value={currentCategory.description || ""}
+                    placeholder="Enter warehouse description"
+                    value={currentWarehouse.description || ""}
                     onChangeText={(text) =>
-                      setCurrentCategory({
-                        ...currentCategory,
+                      setCurrentWarehouse({
+                        ...currentWarehouse,
                         description: text,
                       })
                     }
@@ -409,10 +453,10 @@ export default function DeviceCategoriesScreen() {
 
                 <TouchableOpacity
                   className="bg-blue-600 py-3 rounded-lg items-center mt-4"
-                  onPress={handleEditCategory}
+                  onPress={handleEditWarehouse}
                 >
                   <Text className="text-white font-bold text-lg">
-                    Update Category
+                    Update Warehouse
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -420,6 +464,9 @@ export default function DeviceCategoriesScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Bottom Tabs */}
+      <EquipmentTabs activeTab="warehouses" />
     </SafeAreaView>
   );
 }
