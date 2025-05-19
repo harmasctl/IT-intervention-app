@@ -168,6 +168,7 @@ function RootLayoutNav() {
       })}
     >
       <Stack.Screen name="index" options={{ headerShown: false }} />
+      <Stack.Screen name="dashboard" options={{ headerShown: false }} />
       <Stack.Screen name="tickets/index" options={{ headerShown: false }} />
       <Stack.Screen name="tickets/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="tickets/create" options={{ headerShown: false }} />
@@ -198,11 +199,14 @@ function RootLayoutNav() {
       <Stack.Screen name="profile/settings" options={{ headerShown: false }} />
       <Stack.Screen name="schedule/create" options={{ headerShown: false }} />
       <Stack.Screen name="restaurants/index" options={{ headerShown: false }} />
+      <Stack.Screen name="restaurants/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="admin/index" options={{ headerShown: false }} />
       <Stack.Screen
         name="notifications/index"
         options={{ headerShown: false }}
       />
+      <Stack.Screen name="users/index" options={{ headerShown: false }} />
+      <Stack.Screen name="users/[id]" options={{ headerShown: false }} />
     </Stack>
   );
 }
@@ -214,8 +218,14 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (process.env.EXPO_PUBLIC_TEMPO && Platform.OS === "web") {
-      const { TempoDevtools } = require("tempo-devtools");
-      TempoDevtools.init();
+      try {
+        // Only try to require if we're in a web environment and the env var is set
+        const tempoDevtools = require("tempo-devtools");
+        tempoDevtools.TempoDevtools.init();
+      } catch (error) {
+        // Silently fail if the module is not available
+        console.log("Tempo devtools not available, skipping initialization");
+      }
     }
   }, []);
 

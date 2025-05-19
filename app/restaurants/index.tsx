@@ -8,6 +8,7 @@ import {
   TextInput,
   Alert,
   Modal,
+  ScrollView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
@@ -21,16 +22,25 @@ import {
   Mail,
   ChevronRight,
   X,
+  User,
+  CircleCheck,
+  AlertCircle,
+  Hammer,
 } from "lucide-react-native";
 import { supabase } from "../../lib/supabase";
+import { Image } from "expo-image";
+import * as ImagePicker from "expo-image-picker";
+import { decode } from "base64-arraybuffer";
 
 type Restaurant = {
   id: string;
   name: string;
+  location?: string;
   address?: string;
-  city?: string;
   phone?: string;
   email?: string;
+  manager_name?: string;
+  status?: 'active' | 'closed' | 'renovation';
   created_at: string;
 };
 
@@ -44,13 +54,16 @@ export default function RestaurantsScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [newRestaurant, setNewRestaurant] = useState({
-    id: "",
     name: "",
+    location: "",
     address: "",
-    city: "",
     phone: "",
     email: "",
+    manager_name: "",
+    status: "active" as Restaurant["status"],
   });
+  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   useEffect(() => {
     fetchRestaurants();
@@ -108,11 +121,91 @@ export default function RestaurantsScreen() {
     const filtered = restaurants.filter(
       (restaurant) =>
         restaurant.name.toLowerCase().includes(query) ||
-        restaurant.city?.toLowerCase().includes(query) ||
-        restaurant.address?.toLowerCase().includes(query),
+        restaurant.location?.toLowerCase().includes(query) ||
+        restaurant.address?.toLowerCase().includes(query) ||
+        restaurant.manager_name?.toLowerCase().includes(query),
     );
 
     setFilteredRestaurants(filtered);
+  };
+
+  const pickImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets[0]) {
+        setImageUri(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error("Error picking image:", error);
+      Alert.alert("Error", "Failed to select image");
+    }
+  };
+
+  const uploadImage = async (restaurantId: string): Promise<string | null> => {
+    if (!imageUri) return null;
+
+    try {
+      setUploadingImage(true);
+      
+      // Get the file extension
+      const fileExt = imageUri.split(".").pop()?.toLowerCase() || "jpeg";
+      const fileName = `${restaurantId}.${fileExt}`;
+      const filePath = `${fileName}`;
+      
+      // Convert image to base64
+      const response = await fetch(imageUri);
+      const blob = await response.blob();
+      const reader = new FileReader();
+      
+      return new Promise((resolve, reject) => {
+        reader.onload = async () => {
+          const base64 = reader.result as string;
+          const base64Data = base64.split(",")[1];
+          
+          if (!base64Data) {
+            reject(new Error("Failed to process image"));
+            return;
+          }
+          
+          const { data, error } = await supabase.storage
+            .from("restaurant-photos")
+            .upload(filePath, decode(base64Data), {
+              contentType: `image/${fileExt}`,
+              upsert: true,
+            });
+            
+          if (error) {
+            console.error("Error uploading image:", error);
+            reject(error);
+            return;
+          }
+          
+          const { data: publicUrlData } = supabase.storage
+            .from("restaurant-photos")
+            .getPublicUrl(filePath);
+            
+          resolve(publicUrlData.publicUrl);
+        };
+        
+        reader.onerror = () => {
+          reject(new Error("Failed to read file"));
+        };
+        
+        reader.readAsDataURL(blob);
+      });
+    } catch (error) {
+      console.error("Error in uploadImage:", error);
+      return null;
+    } finally {
+      setUploadingImage(false);
+    }
   };
 
   const handleAddRestaurant = async () => {
@@ -121,43 +214,53 @@ export default function RestaurantsScreen() {
       return;
     }
 
-    if (!newRestaurant.id) {
-      Alert.alert("Error", "Restaurant ID is required");
-      return;
-    }
-
     try {
-      const { data, error } = await supabase.from("restaurants").insert([
-        {
-          id: newRestaurant.id,
-          name: newRestaurant.name,
-          address: newRestaurant.address || null,
-          city: newRestaurant.city || null,
-          phone: newRestaurant.phone || null,
-          email: newRestaurant.email || null,
-        },
-      ]);
+      // Insert the restaurant first
+      const { data, error } = await supabase
+        .from("restaurants")
+        .insert([
+          {
+            name: newRestaurant.name,
+            location: newRestaurant.location || null,
+            address: newRestaurant.address || null,
+            phone: newRestaurant.phone || null,
+            email: newRestaurant.email || null,
+            manager_name: newRestaurant.manager_name || null,
+            status: newRestaurant.status || 'active',
+          },
+        ])
+        .select();
 
       if (error) {
-        if (error.code === "23505") {
-          // Unique violation
-          Alert.alert("Error", "A restaurant with this ID already exists");
-        } else {
-          throw error;
+        throw error;
+      }
+
+      if (data && data[0] && imageUri) {
+        // Upload image if available
+        const restaurantId = data[0].id;
+        const imageUrl = await uploadImage(restaurantId);
+        
+        if (imageUrl) {
+          // Update restaurant with image URL
+          await supabase
+            .from("restaurants")
+            .update({ image_url: imageUrl })
+            .eq("id", restaurantId);
         }
-        return;
       }
 
       Alert.alert("Success", "Restaurant added successfully");
       setShowAddModal(false);
       setNewRestaurant({
-        id: "",
         name: "",
+        location: "",
         address: "",
-        city: "",
         phone: "",
         email: "",
+        manager_name: "",
+        status: "active",
       });
+      setImageUri(null);
       fetchRestaurants();
     } catch (error) {
       console.error("Error adding restaurant:", error);
@@ -167,6 +270,32 @@ export default function RestaurantsScreen() {
 
   const handleRestaurantPress = (restaurant: Restaurant) => {
     router.push(`/restaurants/${restaurant.id}`);
+  };
+
+  const getStatusIcon = (status?: string) => {
+    switch (status) {
+      case 'active':
+        return <CircleCheck size={14} color="#16a34a" />;
+      case 'closed':
+        return <AlertCircle size={14} color="#dc2626" />;
+      case 'renovation':
+        return <Hammer size={14} color="#f59e0b" />;
+      default:
+        return <CircleCheck size={14} color="#16a34a" />;
+    }
+  };
+
+  const getStatusText = (status?: string) => {
+    switch (status) {
+      case 'active':
+        return "Active";
+      case 'closed':
+        return "Closed";
+      case 'renovation':
+        return "Under Renovation";
+      default:
+        return "Active";
+    }
   };
 
   const renderRestaurantItem = ({ item }: { item: Restaurant }) => (
@@ -182,39 +311,51 @@ export default function RestaurantsScreen() {
           </View>
           <View className="flex-1">
             <Text className="font-bold text-lg text-gray-800">{item.name}</Text>
-            <Text className="text-gray-500 text-sm">{item.id}</Text>
+            <View className="flex-row items-center">
+              {getStatusIcon(item.status)}
+              <Text className="text-gray-500 text-sm ml-1">{getStatusText(item.status)}</Text>
+            </View>
           </View>
         </View>
         <ChevronRight size={20} color="#9ca3af" />
       </View>
 
-      {(item.address || item.city || item.phone) && (
-        <View className="mt-3 border-t border-gray-100 pt-3">
-          {item.address && (
-            <View className="flex-row items-center mt-1">
-              <MapPin size={14} color="#4b5563" />
-              <Text className="text-gray-500 text-sm ml-1">
-                {item.address}
-                {item.city ? `, ${item.city}` : ""}
-              </Text>
-            </View>
-          )}
+      <View className="mt-3 border-t border-gray-100 pt-3">
+        {item.location && (
+          <View className="flex-row items-center mt-1">
+            <MapPin size={14} color="#4b5563" />
+            <Text className="text-gray-500 text-sm ml-1">{item.location}</Text>
+          </View>
+        )}
 
-          {item.phone && (
-            <View className="flex-row items-center mt-1">
-              <Phone size={14} color="#4b5563" />
-              <Text className="text-gray-500 text-sm ml-1">{item.phone}</Text>
-            </View>
-          )}
+        {item.address && (
+          <View className="flex-row items-center mt-1">
+            <MapPin size={14} color="#4b5563" />
+            <Text className="text-gray-500 text-sm ml-1">{item.address}</Text>
+          </View>
+        )}
 
-          {item.email && (
-            <View className="flex-row items-center mt-1">
-              <Mail size={14} color="#4b5563" />
-              <Text className="text-gray-500 text-sm ml-1">{item.email}</Text>
-            </View>
-          )}
-        </View>
-      )}
+        {item.phone && (
+          <View className="flex-row items-center mt-1">
+            <Phone size={14} color="#4b5563" />
+            <Text className="text-gray-500 text-sm ml-1">{item.phone}</Text>
+          </View>
+        )}
+
+        {item.email && (
+          <View className="flex-row items-center mt-1">
+            <Mail size={14} color="#4b5563" />
+            <Text className="text-gray-500 text-sm ml-1">{item.email}</Text>
+          </View>
+        )}
+
+        {item.manager_name && (
+          <View className="flex-row items-center mt-1">
+            <User size={14} color="#4b5563" />
+            <Text className="text-gray-500 text-sm ml-1">{item.manager_name}</Text>
+          </View>
+        )}
+      </View>
     </TouchableOpacity>
   );
 
@@ -248,76 +389,73 @@ export default function RestaurantsScreen() {
       </View>
 
       {/* Restaurant List */}
-      <View className="flex-1 px-4 pt-4">
-        {loading ? (
-          <View className="flex-1 justify-center items-center">
-            <ActivityIndicator size="large" color="#1e40af" />
-            <Text className="mt-2 text-gray-600">Loading restaurants...</Text>
-          </View>
-        ) : filteredRestaurants.length > 0 ? (
-          <FlatList
-            data={filteredRestaurants}
-            renderItem={renderRestaurantItem}
-            keyExtractor={(item) => item.id}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: 20 }}
-            refreshing={loading}
-            onRefresh={fetchRestaurants}
-          />
-        ) : (
-          <View className="flex-1 justify-center items-center">
-            <Building2 size={48} color="#9ca3af" />
-            <Text className="mt-4 text-gray-500 text-center">
-              No restaurants found
-            </Text>
-            <TouchableOpacity
-              className="mt-4 bg-blue-600 px-4 py-2 rounded-lg"
-              onPress={() => setShowAddModal(true)}
-            >
-              <Text className="text-white font-medium">Add New Restaurant</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
+      {loading ? (
+        <View className="flex-1 justify-center items-center">
+          <ActivityIndicator size="large" color="#1e40af" />
+        </View>
+      ) : filteredRestaurants.length > 0 ? (
+        <FlatList
+          data={filteredRestaurants}
+          renderItem={renderRestaurantItem}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={{ padding: 16 }}
+          showsVerticalScrollIndicator={false}
+        />
+      ) : (
+        <View className="flex-1 justify-center items-center p-4">
+          <Text className="text-gray-500 text-lg text-center">
+            No restaurants found
+          </Text>
+        </View>
+      )}
 
       {/* Add Restaurant Modal */}
       <Modal
         visible={showAddModal}
-        transparent={true}
         animationType="slide"
+        transparent={true}
         onRequestClose={() => setShowAddModal(false)}
       >
-        <View className="flex-1 bg-black bg-opacity-50 justify-end">
-          <View className="bg-white rounded-t-3xl p-6">
+        <View className="flex-1 justify-end bg-black bg-opacity-50">
+          <View className="bg-white rounded-t-3xl p-6 h-5/6">
             <View className="flex-row justify-between items-center mb-6">
-              <Text className="text-xl font-bold text-gray-800">
+              <Text className="text-2xl font-bold text-gray-800">
                 Add New Restaurant
               </Text>
-              <TouchableOpacity onPress={() => setShowAddModal(false)}>
-                <X size={24} color="#4b5563" />
+              <TouchableOpacity
+                onPress={() => setShowAddModal(false)}
+                className="bg-gray-200 rounded-full p-2"
+              >
+                <X size={20} color="#4b5563" />
               </TouchableOpacity>
             </View>
 
-            <View className="space-y-4">
-              <View>
-                <Text className="text-gray-700 mb-1 font-medium">
-                  Restaurant ID *
-                </Text>
-                <TextInput
-                  className="border border-gray-300 rounded-lg px-3 py-2"
-                  placeholder="Enter restaurant ID"
-                  value={newRestaurant.id}
-                  onChangeText={(text) =>
-                    setNewRestaurant({ ...newRestaurant, id: text })
-                  }
-                />
-              </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {/* Restaurant Image */}
+              <TouchableOpacity
+                onPress={pickImage}
+                className="bg-gray-100 rounded-xl h-40 justify-center items-center mb-6"
+              >
+                {imageUri ? (
+                  <Image
+                    source={{ uri: imageUri }}
+                    className="w-full h-full rounded-xl"
+                    contentFit="cover"
+                  />
+                ) : (
+                  <View className="items-center">
+                    <Building2 size={40} color="#9ca3af" />
+                    <Text className="text-gray-500 mt-2">Add Restaurant Photo</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
 
-              <View>
-                <Text className="text-gray-700 mb-1 font-medium">Name *</Text>
+              {/* Form Fields */}
+              <View className="mb-4">
+                <Text className="text-gray-700 mb-2 font-medium">Name *</Text>
                 <TextInput
-                  className="border border-gray-300 rounded-lg px-3 py-2"
-                  placeholder="Enter restaurant name"
+                  className="bg-gray-100 rounded-xl px-4 py-3 text-gray-800"
+                  placeholder="Restaurant name"
                   value={newRestaurant.name}
                   onChangeText={(text) =>
                     setNewRestaurant({ ...newRestaurant, name: text })
@@ -325,35 +463,36 @@ export default function RestaurantsScreen() {
                 />
               </View>
 
-              <View>
-                <Text className="text-gray-700 mb-1 font-medium">Address</Text>
+              <View className="mb-4">
+                <Text className="text-gray-700 mb-2 font-medium">Location</Text>
                 <TextInput
-                  className="border border-gray-300 rounded-lg px-3 py-2"
-                  placeholder="Enter address"
+                  className="bg-gray-100 rounded-xl px-4 py-3 text-gray-800"
+                  placeholder="City, State"
+                  value={newRestaurant.location}
+                  onChangeText={(text) =>
+                    setNewRestaurant({ ...newRestaurant, location: text })
+                  }
+                />
+              </View>
+
+              <View className="mb-4">
+                <Text className="text-gray-700 mb-2 font-medium">Address</Text>
+                <TextInput
+                  className="bg-gray-100 rounded-xl px-4 py-3 text-gray-800"
+                  placeholder="Full address"
                   value={newRestaurant.address}
                   onChangeText={(text) =>
                     setNewRestaurant({ ...newRestaurant, address: text })
                   }
+                  multiline
                 />
               </View>
 
-              <View>
-                <Text className="text-gray-700 mb-1 font-medium">City</Text>
+              <View className="mb-4">
+                <Text className="text-gray-700 mb-2 font-medium">Phone</Text>
                 <TextInput
-                  className="border border-gray-300 rounded-lg px-3 py-2"
-                  placeholder="Enter city"
-                  value={newRestaurant.city}
-                  onChangeText={(text) =>
-                    setNewRestaurant({ ...newRestaurant, city: text })
-                  }
-                />
-              </View>
-
-              <View>
-                <Text className="text-gray-700 mb-1 font-medium">Phone</Text>
-                <TextInput
-                  className="border border-gray-300 rounded-lg px-3 py-2"
-                  placeholder="Enter phone number"
+                  className="bg-gray-100 rounded-xl px-4 py-3 text-gray-800"
+                  placeholder="Phone number"
                   value={newRestaurant.phone}
                   onChangeText={(text) =>
                     setNewRestaurant({ ...newRestaurant, phone: text })
@@ -362,11 +501,11 @@ export default function RestaurantsScreen() {
                 />
               </View>
 
-              <View>
-                <Text className="text-gray-700 mb-1 font-medium">Email</Text>
+              <View className="mb-4">
+                <Text className="text-gray-700 mb-2 font-medium">Email</Text>
                 <TextInput
-                  className="border border-gray-300 rounded-lg px-3 py-2"
-                  placeholder="Enter email"
+                  className="bg-gray-100 rounded-xl px-4 py-3 text-gray-800"
+                  placeholder="Email address"
                   value={newRestaurant.email}
                   onChangeText={(text) =>
                     setNewRestaurant({ ...newRestaurant, email: text })
@@ -376,15 +515,67 @@ export default function RestaurantsScreen() {
                 />
               </View>
 
+              <View className="mb-4">
+                <Text className="text-gray-700 mb-2 font-medium">Manager</Text>
+                <TextInput
+                  className="bg-gray-100 rounded-xl px-4 py-3 text-gray-800"
+                  placeholder="Manager name"
+                  value={newRestaurant.manager_name}
+                  onChangeText={(text) =>
+                    setNewRestaurant({ ...newRestaurant, manager_name: text })
+                  }
+                />
+              </View>
+
+              <View className="mb-6">
+                <Text className="text-gray-700 mb-2 font-medium">Status</Text>
+                <View className="flex-row">
+                  {["active", "closed", "renovation"].map((status) => (
+                    <TouchableOpacity
+                      key={status}
+                      className={`flex-1 py-3 mr-2 rounded-xl flex-row justify-center items-center ${
+                        newRestaurant.status === status
+                          ? "bg-blue-100 border border-blue-500"
+                          : "bg-gray-100"
+                      }`}
+                      onPress={() =>
+                        setNewRestaurant({
+                          ...newRestaurant,
+                          status: status as Restaurant["status"],
+                        })
+                      }
+                    >
+                      {status === "active" && <CircleCheck size={16} color="#16a34a" />}
+                      {status === "closed" && <AlertCircle size={16} color="#dc2626" />}
+                      {status === "renovation" && <Hammer size={16} color="#f59e0b" />}
+                      <Text
+                        className={`ml-1 ${
+                          newRestaurant.status === status
+                            ? "text-blue-700 font-medium"
+                            : "text-gray-700"
+                        }`}
+                      >
+                        {status === "active" ? "Active" : status === "closed" ? "Closed" : "Renovation"}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
               <TouchableOpacity
-                className="bg-blue-600 py-3 rounded-lg items-center mt-4"
+                className="bg-blue-600 rounded-xl py-4 items-center mb-6"
                 onPress={handleAddRestaurant}
+                disabled={uploadingImage}
               >
-                <Text className="text-white font-bold text-lg">
-                  Add Restaurant
-                </Text>
+                {uploadingImage ? (
+                  <ActivityIndicator color="white" />
+                ) : (
+                  <Text className="text-white font-bold text-lg">
+                    Add Restaurant
+                  </Text>
+                )}
               </TouchableOpacity>
-            </View>
+            </ScrollView>
           </View>
         </View>
       </Modal>

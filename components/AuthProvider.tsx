@@ -1,27 +1,8 @@
 import React, { createContext, useState, useEffect, useContext } from "react";
-import { createClient } from "@supabase/supabase-js";
-import { Database } from "../lib/database.types";
 import { Session, User } from "@supabase/supabase-js";
 import { View, Text, ActivityIndicator, Alert } from "react-native";
-
-// Create a direct supabase client for AuthProvider to avoid circular dependencies
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || "";
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || "";
-
-// Log environment variables status for debugging
-if (!process.env.EXPO_PUBLIC_SUPABASE_URL) {
-  console.error(
-    "EXPO_PUBLIC_SUPABASE_URL is not defined in environment variables",
-  );
-}
-
-if (!process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY) {
-  console.error(
-    "EXPO_PUBLIC_SUPABASE_ANON_KEY is not defined in environment variables",
-  );
-}
-
-const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
+import { supabase } from "../lib/supabase";
+import { Database } from "../types/supabase";
 
 type AuthContextType = {
   session: Session | null;
@@ -99,16 +80,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Create user profile in the users table
       if (data?.user) {
-        const { error: profileError } = await supabase.from("users").insert([
-          {
-            id: data.user.id,
-            email: email,
-            name: userData.name,
-            role: userData.role,
-            avatar_url: userData.avatar_url || null,
-            created_at: new Date().toISOString(),
-          },
-        ]);
+        const { error: profileError } = await supabase
+          .from("users")
+          .insert([
+            {
+              id: data.user.id,
+              email: email,
+              name: userData.name,
+              role: userData.role,
+              avatar_url: userData.avatar_url || null,
+              created_at: new Date().toISOString(),
+            },
+          ] as any); // Type assertion to fix TypeScript error
 
         if (profileError) {
           console.error("Error creating user profile:", profileError);

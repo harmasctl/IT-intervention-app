@@ -14,11 +14,15 @@ import {
   AlertCircle,
   Upload,
   Check,
+  X,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { supabase } from "../lib/supabase";
 import { Image } from "expo-image";
 import { Database } from "../lib/database.types";
+import * as ImagePicker from "expo-image-picker";
+import { decode } from "base64-arraybuffer";
+import { useAuth } from "../components/AuthProvider";
 
 interface DeviceOption {
   id: string;
@@ -29,12 +33,13 @@ interface DeviceOption {
 interface RestaurantOption {
   id: string;
   name: string;
-  location: string;
+  location?: string;
 }
 
 interface CreateTicketFormProps {
   onSubmit?: (ticketData: TicketData) => void;
   onCancel?: () => void;
+  isSubmitting?: boolean;
 }
 
 interface TicketData {
@@ -44,10 +49,10 @@ interface TicketData {
   restaurant: RestaurantOption | null;
   priority: "low" | "medium" | "high";
   photos: string[];
-  jiraTicketId: string;
 }
 
-const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
+const CreateTicketForm = ({ onSubmit, onCancel, isSubmitting = false }: CreateTicketFormProps) => {
+  const { user } = useAuth();
   const [currentStep, setCurrentStep] = useState(0);
   const [ticketData, setTicketData] = useState<TicketData>({
     title: "",
@@ -56,7 +61,6 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
     restaurant: null,
     priority: "medium",
     photos: [],
-    jiraTicketId: "",
   });
 
   const [deviceSearchQuery, setDeviceSearchQuery] = useState("");
@@ -66,7 +70,18 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
   const [loading, setLoading] = useState({
     devices: false,
     restaurants: false,
+    imageUpload: false,
   });
+
+  // Request camera permissions
+  useEffect(() => {
+    (async () => {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission required', 'Camera access is needed to take photos');
+      }
+    })();
+  }, []);
 
   // Fetch devices and restaurants from Supabase
   useEffect(() => {
@@ -104,7 +119,7 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
       setLoading((prev) => ({ ...prev, restaurants: true }));
       const { data, error } = await supabase
         .from("restaurants")
-        .select("id, name, location");
+        .select("id, name");
 
       if (error) throw error;
 
@@ -112,7 +127,6 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
         const formattedRestaurants = data.map((restaurant) => ({
           id: restaurant.id,
           name: restaurant.name,
-          location: restaurant.location || "Unknown Location",
         }));
         setRestaurants(formattedRestaurants);
       }
@@ -125,6 +139,11 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
   };
 
   const handleSubmit = async () => {
+    if (!isFormValid()) {
+      Alert.alert("Incomplete Form", "Please fill in all required fields");
+      return;
+    }
+    
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
     if (onSubmit) {
@@ -136,242 +155,473 @@ const CreateTicketForm = ({ onSubmit, onCancel }: CreateTicketFormProps) => {
     setTicketData((prev) => ({ ...prev, [field]: value }));
   };
 
-  // Function to handle photo capture (in a real app, this would use the camera)
-  const addMockPhoto = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const newPhoto = `https://images.unsplash.com/photo-${Math.floor(Math.random() * 1000)}?w=300&q=80`;
-    updateTicketData("photos", [...ticketData.photos, newPhoto]);
+  // Real image upload functionality
+  const takePhoto = async () => {
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets[0]) {
+        await uploadImage(result.assets[0]);
+      }
+    } catch (error) {
+      console.error('Error taking photo:', error);
+      Alert.alert('Error', 'Failed to take photo. Please try again.');
+    }
   };
 
-  const removeMockPhoto = (index: number) => {
-    const updatedPhotos = [...ticketData.photos];
-    updatedPhotos.splice(index, 1);
-    updateTicketData("photos", updatedPhotos);
+  const pickImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets[0]) {
+        await uploadImage(result.assets[0]);
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to select image. Please try again.');
+    }
   };
 
-  const filteredDevices = devices.filter(
-    (device) =>
-      device.name.toLowerCase().includes(deviceSearchQuery.toLowerCase()) ||
-      device.type.toLowerCase().includes(deviceSearchQuery.toLowerCase()),
-  );
+  const uploadImage = async (imageAsset: ImagePicker.ImagePickerAsset) => {
+    if (!imageAsset.base64) {
+      Alert.alert('Error', 'Image data is missing');
+      return;
+    }
 
-  const filteredRestaurants = restaurants.filter(
-    (restaurant) =>
-      restaurant.name
-        .toLowerCase()
-        .includes(restaurantSearchQuery.toLowerCase()) ||
-      restaurant.location
-        .toLowerCase()
-        .includes(restaurantSearchQuery.toLowerCase()),
-  );
+    try {
+      setLoading(prev => ({ ...prev, imageUpload: true }));
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+      // Create a unique file name
+      const fileName = `ticket-photo-${Date.now()}.jpg`;
+      const filePath = `tickets/${user?.id || 'anonymous'}/${fileName}`;
+      
+      // Upload image to Supabase Storage
+      const { data, error } = await supabase.storage
+        .from('ticket-photos')
+        .upload(filePath, decode(imageAsset.base64), {
+          contentType: 'image/jpeg',
+        });
+
+      if (error) throw error;
+
+      // Get the public URL for the uploaded image
+      const { data: publicUrlData } = supabase.storage
+        .from('ticket-photos')
+        .getPublicUrl(filePath);
+
+      if (publicUrlData && publicUrlData.publicUrl) {
+        // Add the new photo URL to the ticket data
+        updateTicketData('photos', [...ticketData.photos, publicUrlData.publicUrl]);
+      }
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      Alert.alert('Error', 'Failed to upload image. Please try again.');
+    } finally {
+      setLoading(prev => ({ ...prev, imageUpload: false }));
+    }
+  };
+
+  const removePhoto = async (index: number) => {
+    try {
+      const photoUrl = ticketData.photos[index];
+      
+      // Extract the file path from the URL
+      const storageUrl = 'https://mxbebraqpukeanginfxr.supabase.co/storage/v1/object/public/ticket-photos/';
+      if (photoUrl.startsWith(storageUrl)) {
+        const filePath = photoUrl.replace(storageUrl, '');
+        
+        // Delete the file from storage
+        await supabase.storage
+          .from('ticket-photos')
+          .remove([filePath]);
+      }
+
+      // Remove the photo from the ticket data
+      const updatedPhotos = [...ticketData.photos];
+      updatedPhotos.splice(index, 1);
+      updateTicketData('photos', updatedPhotos);
+      
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      console.error('Error removing photo:', error);
+      Alert.alert('Error', 'Failed to remove photo');
+    }
+  };
 
   const renderStepIndicator = () => (
-    <View className="flex-row justify-between mb-6 px-4">
-      {[0, 1, 2, 3, 4, 5].map((step) => (
+    <View className="flex-row justify-center my-4">
+      {[0, 1, 2, 3].map((step) => (
         <View
           key={step}
-          className={`h-2 flex-1 mx-1 rounded-full ${currentStep >= step ? "bg-blue-500" : "bg-gray-300"} transition-all duration-300 ease-in-out`}
+          className={`h-2 w-2 rounded-full mx-1 ${
+            currentStep === step ? "bg-blue-600" : "bg-gray-300"
+          }`}
         />
       ))}
     </View>
   );
 
   const renderStepContent = () => {
-    return (
-      <View className="px-4 animate-fade-in">
-        <Text className="text-lg font-bold mb-2">Create Support Ticket</Text>
-        <Text className="text-gray-600 mb-4">
-          Fill out all details to create a new support ticket
-        </Text>
-
-        {/* Ticket Title */}
-        <Text className="font-semibold mb-1">Ticket Title *</Text>
-        <TextInput
-          className="border border-gray-300 rounded-lg p-3 mb-4 bg-white"
-          placeholder="e.g., Ice Cream Machine Not Cooling"
-          value={ticketData.title}
-          onChangeText={(text) => updateTicketData("title", text)}
-        />
-
-        {/* Device Selection */}
-        <Text className="font-semibold mb-1">Select Device *</Text>
-        <TextInput
-          className="border border-gray-300 rounded-lg p-3 mb-2 bg-white"
-          placeholder="Search devices..."
-          value={deviceSearchQuery}
-          onChangeText={setDeviceSearchQuery}
-        />
-
-        {loading.devices ? (
-          <View className="items-center justify-center py-2 mb-4">
-            <ActivityIndicator size="small" color="#3b82f6" />
-            <Text className="mt-1 text-gray-500 text-sm">
-              Loading devices...
+    switch (currentStep) {
+      case 0:
+        return (
+          <View className="px-4">
+            <Text className="text-lg font-bold mb-2">Ticket Title</Text>
+            <Text className="text-gray-600 mb-4">
+              Provide a clear title for your issue
             </Text>
-          </View>
-        ) : (
-          <ScrollView className="max-h-32 mb-4 border border-gray-200 rounded-lg">
-            {filteredDevices.map((device) => (
-              <TouchableOpacity
-                key={device.id}
-                className={`p-3 border-b border-gray-200 flex-row justify-between items-center ${ticketData.device?.id === device.id ? "bg-blue-50" : ""}`}
-                onPress={() => updateTicketData("device", device)}
-              >
-                <View>
-                  <Text className="font-semibold">{device.name}</Text>
-                  <Text className="text-gray-500 text-sm">{device.type}</Text>
-                </View>
-                {ticketData.device?.id === device.id && (
-                  <Check size={20} color="#3b82f6" />
-                )}
-              </TouchableOpacity>
-            ))}
-            {filteredDevices.length === 0 && (
-              <View className="py-4 items-center">
-                <Text className="text-gray-500">No devices found</Text>
-              </View>
-            )}
-          </ScrollView>
-        )}
+            <TextInput
+              className="bg-gray-100 p-4 rounded-lg text-base"
+              placeholder="Enter ticket title"
+              value={ticketData.title}
+              onChangeText={(text) => updateTicketData("title", text)}
+            />
 
-        {/* Diagnostic Information */}
-        <Text className="font-semibold mb-1">Diagnostic Information *</Text>
-        <TextInput
-          className="border border-gray-300 rounded-lg p-3 mb-4 bg-white h-24"
-          placeholder="Describe the problem in detail..."
-          multiline
-          textAlignVertical="top"
-          value={ticketData.diagnosticInfo}
-          onChangeText={(text) => updateTicketData("diagnosticInfo", text)}
-        />
-
-        {/* Restaurant Location */}
-        <Text className="font-semibold mb-1">Restaurant Location *</Text>
-        <TextInput
-          className="border border-gray-300 rounded-lg p-3 mb-2 bg-white"
-          placeholder="Search restaurants..."
-          value={restaurantSearchQuery}
-          onChangeText={setRestaurantSearchQuery}
-        />
-
-        {loading.restaurants ? (
-          <View className="items-center justify-center py-2 mb-4">
-            <ActivityIndicator size="small" color="#3b82f6" />
-            <Text className="mt-1 text-gray-500 text-sm">
-              Loading restaurants...
+            <Text className="text-lg font-bold mt-6 mb-2">Priority Level</Text>
+            <Text className="text-gray-600 mb-4">
+              Select the priority level for this issue
             </Text>
-          </View>
-        ) : (
-          <ScrollView className="max-h-32 mb-4 border border-gray-200 rounded-lg">
-            {filteredRestaurants.map((restaurant) => (
-              <TouchableOpacity
-                key={restaurant.id}
-                className={`p-3 border-b border-gray-200 flex-row justify-between items-center ${ticketData.restaurant?.id === restaurant.id ? "bg-blue-50" : ""}`}
-                onPress={() => updateTicketData("restaurant", restaurant)}
-              >
-                <View>
-                  <Text className="font-semibold">{restaurant.name}</Text>
-                  <Text className="text-gray-500 text-sm">
-                    {restaurant.location}
+            <View className="flex-row justify-between">
+              {["low", "medium", "high"].map((priority) => (
+                <TouchableOpacity
+                  key={priority}
+                  className={`flex-1 py-3 mx-1 rounded-lg ${
+                    ticketData.priority === priority
+                      ? priority === "high"
+                        ? "bg-red-500"
+                        : priority === "medium"
+                        ? "bg-amber-500"
+                        : "bg-green-500"
+                      : "bg-gray-200"
+                  }`}
+                  onPress={() => {
+                    updateTicketData("priority", priority);
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  }}
+                >
+                  <Text
+                    className={`text-center font-medium ${
+                      ticketData.priority === priority
+                        ? "text-white"
+                        : "text-gray-700"
+                    }`}
+                  >
+                    {priority.charAt(0).toUpperCase() + priority.slice(1)}
                   </Text>
-                </View>
-                {ticketData.restaurant?.id === restaurant.id && (
-                  <Check size={20} color="#3b82f6" />
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        );
+
+      case 1:
+        return (
+          <View className="px-4">
+            <Text className="text-lg font-bold mb-2">Select Device</Text>
+            <Text className="text-gray-600 mb-4">
+              Choose the device that needs attention
+            </Text>
+
+            <TextInput
+              className="bg-gray-100 p-4 rounded-lg text-base mb-4"
+              placeholder="Search devices..."
+              value={deviceSearchQuery}
+              onChangeText={setDeviceSearchQuery}
+            />
+
+            {loading.devices ? (
+              <ActivityIndicator size="small" color="#1e40af" />
+            ) : (
+              <ScrollView
+                className="max-h-80"
+                showsVerticalScrollIndicator={true}
+              >
+                {devices
+                  .filter((device) =>
+                    device.name
+                      .toLowerCase()
+                      .includes(deviceSearchQuery.toLowerCase())
+                  )
+                  .map((device) => (
+                    <TouchableOpacity
+                      key={device.id}
+                      className={`p-4 mb-2 rounded-lg flex-row justify-between items-center ${
+                        ticketData.device?.id === device.id
+                          ? "bg-blue-100 border border-blue-300"
+                          : "bg-gray-100"
+                      }`}
+                      onPress={() => {
+                        updateTicketData("device", device);
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      }}
+                    >
+                      <View>
+                        <Text className="font-medium">{device.name}</Text>
+                        <Text className="text-gray-500 text-sm">
+                          {device.type}
+                        </Text>
+                      </View>
+                      {ticketData.device?.id === device.id && (
+                        <Check size={20} color="#1e40af" />
+                      )}
+                    </TouchableOpacity>
+                  ))}
+
+                {devices.filter((device) =>
+                  device.name
+                    .toLowerCase()
+                    .includes(deviceSearchQuery.toLowerCase())
+                ).length === 0 && (
+                  <View className="py-4 items-center">
+                    <Text className="text-gray-500">No devices found</Text>
+                  </View>
                 )}
+              </ScrollView>
+            )}
+          </View>
+        );
+
+      case 2:
+        return (
+          <View className="px-4">
+            <Text className="text-lg font-bold mb-2">Select Restaurant</Text>
+            <Text className="text-gray-600 mb-4">
+              Choose the restaurant where the device is located
+            </Text>
+
+            <TextInput
+              className="bg-gray-100 p-4 rounded-lg text-base mb-4"
+              placeholder="Search restaurants..."
+              value={restaurantSearchQuery}
+              onChangeText={setRestaurantSearchQuery}
+            />
+
+            {loading.restaurants ? (
+              <ActivityIndicator size="small" color="#1e40af" />
+            ) : (
+              <ScrollView
+                className="max-h-80"
+                showsVerticalScrollIndicator={true}
+              >
+                {restaurants
+                  .filter((restaurant) =>
+                    restaurant.name
+                      .toLowerCase()
+                      .includes(restaurantSearchQuery.toLowerCase())
+                  )
+                  .map((restaurant) => (
+                    <TouchableOpacity
+                      key={restaurant.id}
+                      className={`p-4 mb-2 rounded-lg flex-row justify-between items-center ${
+                        ticketData.restaurant?.id === restaurant.id
+                          ? "bg-blue-100 border border-blue-300"
+                          : "bg-gray-100"
+                      }`}
+                      onPress={() => {
+                        updateTicketData("restaurant", restaurant);
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      }}
+                    >
+                      <View>
+                        <Text className="font-medium">{restaurant.name}</Text>
+                        {restaurant.location && (
+                          <Text className="text-gray-500 text-sm">
+                            {restaurant.location}
+                          </Text>
+                        )}
+                      </View>
+                      {ticketData.restaurant?.id === restaurant.id && (
+                        <Check size={20} color="#1e40af" />
+                      )}
+                    </TouchableOpacity>
+                  ))}
+
+                {restaurants.filter((restaurant) =>
+                  restaurant.name
+                    .toLowerCase()
+                    .includes(restaurantSearchQuery.toLowerCase())
+                ).length === 0 && (
+                  <View className="py-4 items-center">
+                    <Text className="text-gray-500">No restaurants found</Text>
+                  </View>
+                )}
+              </ScrollView>
+            )}
+          </View>
+        );
+
+      case 3:
+        return (
+          <View className="px-4">
+            <Text className="text-lg font-bold mb-2">Diagnostic Information</Text>
+            <Text className="text-gray-600 mb-4">
+              Describe the issue in detail
+            </Text>
+            <TextInput
+              className="bg-gray-100 p-4 rounded-lg text-base mb-6"
+              placeholder="Describe the issue..."
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+              value={ticketData.diagnosticInfo}
+              onChangeText={(text) => updateTicketData("diagnosticInfo", text)}
+            />
+
+            <Text className="text-lg font-bold mb-2">Add Photos</Text>
+            <Text className="text-gray-600 mb-4">
+              Add photos of the issue (optional)
+            </Text>
+
+            <View className="flex-row mb-4">
+              <TouchableOpacity
+                className="bg-blue-100 p-3 rounded-lg flex-row items-center mr-2"
+                onPress={takePhoto}
+                disabled={loading.imageUpload}
+              >
+                <Camera size={20} color="#1e40af" />
+                <Text className="text-blue-800 ml-2">Take Photo</Text>
               </TouchableOpacity>
-            ))}
-            {filteredRestaurants.length === 0 && (
-              <View className="py-4 items-center">
-                <Text className="text-gray-500">No restaurants found</Text>
+
+              <TouchableOpacity
+                className="bg-blue-100 p-3 rounded-lg flex-row items-center"
+                onPress={pickImage}
+                disabled={loading.imageUpload}
+              >
+                <Upload size={20} color="#1e40af" />
+                <Text className="text-blue-800 ml-2">Upload Photo</Text>
+              </TouchableOpacity>
+            </View>
+
+            {loading.imageUpload && (
+              <View className="items-center py-2">
+                <ActivityIndicator size="small" color="#1e40af" />
+                <Text className="text-gray-500 mt-1">Uploading image...</Text>
               </View>
             )}
-          </ScrollView>
-        )}
 
-        {/* Jira Integration */}
-        <Text className="font-semibold mb-1">Jira Ticket ID (Optional)</Text>
-        <TextInput
-          className="border border-gray-300 rounded-lg p-3 mb-4 bg-white"
-          placeholder="e.g., TECH-123"
-          value={ticketData.jiraTicketId}
-          onChangeText={(text) => updateTicketData("jiraTicketId", text)}
-        />
-
-        {/* Priority Level */}
-        <Text className="font-semibold mb-1">Priority Level *</Text>
-        <View className="flex-row mb-4">
-          {(["low", "medium", "high"] as const).map((priority) => (
-            <TouchableOpacity
-              key={priority}
-              className={`flex-1 py-2 mx-1 rounded-lg ${
-                ticketData.priority === priority
-                  ? priority === "low"
-                    ? "bg-green-500"
-                    : priority === "medium"
-                      ? "bg-yellow-500"
-                      : "bg-red-500"
-                  : "bg-gray-200"
-              }`}
-              onPress={() => updateTicketData("priority", priority)}
-            >
-              <Text
-                className={`text-center font-semibold ${ticketData.priority === priority ? "text-white" : "text-gray-700"}`}
+            {ticketData.photos.length > 0 && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                className="mb-4"
               >
-                {priority.charAt(0).toUpperCase() + priority.slice(1)}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+                {ticketData.photos.map((photo, index) => (
+                  <View key={index} className="mr-3 relative">
+                    <Image
+                      source={{ uri: photo }}
+                      style={{ width: 100, height: 100, borderRadius: 8 }}
+                      contentFit="cover"
+                    />
+                    <TouchableOpacity
+                      className="absolute top-1 right-1 bg-red-500 rounded-full p-1"
+                      onPress={() => removePhoto(index)}
+                    >
+                      <X size={16} color="#ffffff" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+        );
 
-        {/* Photos */}
-        <Text className="font-semibold mb-1">Photos (Optional)</Text>
-        <View className="flex-row flex-wrap mb-4">
-          {ticketData.photos.map((photo, index) => (
-            <View key={index} className="w-1/3 p-1 relative">
-              <Image
-                source={{ uri: photo }}
-                className="w-full h-24 rounded-lg"
-              />
-              <TouchableOpacity
-                className="absolute top-2 right-2 bg-red-500 rounded-full w-6 h-6 items-center justify-center"
-                onPress={() => removeMockPhoto(index)}
-              >
-                <Text className="text-white font-bold">×</Text>
-              </TouchableOpacity>
-            </View>
-          ))}
-          <TouchableOpacity className="w-1/3 p-1" onPress={addMockPhoto}>
-            <View className="w-full h-24 border-2 border-dashed border-gray-300 rounded-lg items-center justify-center bg-gray-50">
-              <Camera size={24} color="#9ca3af" />
-              <Text className="text-gray-400 mt-1">Add Photo</Text>
-            </View>
-          </TouchableOpacity>
-        </View>
+      default:
+        return null;
+    }
+  };
 
-        {/* Submit Button */}
-        <TouchableOpacity
-          className={`py-3 px-4 rounded-lg ${ticketData.title.trim() && ticketData.device && ticketData.diagnosticInfo.trim() && ticketData.restaurant ? "bg-blue-500" : "bg-gray-300"} ${ticketData.title.trim() && ticketData.device && ticketData.diagnosticInfo.trim() && ticketData.restaurant ? "animate-pulse" : ""}`}
-          onPress={handleSubmit}
-          disabled={
-            !ticketData.title.trim() ||
-            !ticketData.device ||
-            !ticketData.diagnosticInfo.trim() ||
-            !ticketData.restaurant
-          }
-        >
-          <Text className="text-white text-center font-semibold">
-            Submit Ticket
-          </Text>
-        </TouchableOpacity>
-      </View>
-    );
+  const isFormValid = () => {
+    if (currentStep === 3) {
+      // Final validation before submission
+      return (
+        ticketData.title.trim().length > 0 &&
+        ticketData.device !== null &&
+        ticketData.restaurant !== null &&
+        ticketData.diagnosticInfo.trim().length > 0
+      );
+    }
+    
+    // Check validation for current step
+    switch (currentStep) {
+      case 0:
+        return ticketData.title.trim().length > 0;
+      case 1:
+        return ticketData.device !== null;
+      case 2:
+        return ticketData.restaurant !== null;
+      case 3:
+        return ticketData.diagnosticInfo.trim().length > 0;
+      default:
+        return false;
+    }
   };
 
   return (
-    <ScrollView className="flex-1 bg-white">
-      <View className="pt-4 pb-8 animate-fade-in">
-        {renderStepIndicator()}
-        {renderStepContent()}
+    <ScrollView className="flex-1">
+      {renderStepIndicator()}
+      {renderStepContent()}
+
+      <View className="flex-row justify-between p-4 mt-4">
+        <TouchableOpacity
+          className="px-6 py-3 rounded-lg bg-gray-200"
+          onPress={() => {
+            if (currentStep === 0) {
+              onCancel && onCancel();
+            } else {
+              setCurrentStep(currentStep - 1);
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }
+          }}
+        >
+          <Text className="text-gray-800 font-medium">
+            {currentStep === 0 ? "Cancel" : "Back"}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          className={`px-6 py-3 rounded-lg ${
+            isFormValid()
+              ? currentStep === 3
+                ? "bg-green-500"
+                : "bg-blue-600"
+              : "bg-gray-300"
+          }`}
+          onPress={() => {
+            if (!isFormValid()) {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+              return;
+            }
+
+            if (currentStep === 3) {
+              handleSubmit();
+            } else {
+              setCurrentStep(currentStep + 1);
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }
+          }}
+          disabled={!isFormValid() || isSubmitting}
+        >
+          {isSubmitting && currentStep === 3 ? (
+            <ActivityIndicator size="small" color="#ffffff" />
+          ) : (
+            <Text className="text-white font-medium">
+              {currentStep === 3 ? "Submit Ticket" : "Next"}
+            </Text>
+          )}
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );

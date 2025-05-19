@@ -6,7 +6,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
-  Image,
+  Image as RNImage,
   Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -23,14 +23,15 @@ import {
   User,
   Calendar,
   Image as ImageIcon,
-  Tool,
   FileText,
+  X,
 } from "lucide-react-native";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../components/AuthProvider";
 import TicketStatusWorkflow from "../../components/TicketStatusWorkflow";
 import TicketAssignment from "../../components/TicketAssignment";
 import { useOffline } from "../../components/OfflineManager";
+import { Image } from "expo-image";
 
 export default function TicketDetailScreen() {
   const { id } = useLocalSearchParams();
@@ -41,6 +42,7 @@ export default function TicketDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [isAssignee, setIsAssignee] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
   useEffect(() => {
     if (id) {
@@ -222,9 +224,13 @@ export default function TicketDetailScreen() {
       </View>
 
       <ScrollView className="flex-1 p-4">
-        <View className="mb-6">
-          <Text className="text-gray-700 font-medium mb-2">Description</Text>
-          <Text className="text-gray-800">{ticket.description}</Text>
+        {/* Diagnostic Information */}
+        <View className="mt-4 p-4 bg-gray-50 rounded-lg">
+          <View className="flex-row items-center mb-2">
+            <FileText size={18} color="#1e40af" />
+            <Text className="ml-2 text-gray-800 font-bold">Diagnostic Information</Text>
+          </View>
+          <Text className="text-gray-700">{ticket.diagnostic_info || "No diagnostic information provided"}</Text>
         </View>
 
         <TicketStatusWorkflow
@@ -299,7 +305,7 @@ export default function TicketDetailScreen() {
                 )}
               </View>
               <TouchableOpacity
-                onPress={() => router.push(`/devices/${ticket.device_id}`)}
+                onPress={() => router.back()}
               >
                 <Text className="text-blue-600">View</Text>
               </TouchableOpacity>
@@ -325,9 +331,7 @@ export default function TicketDetailScreen() {
                 </Text>
               </View>
               <TouchableOpacity
-                onPress={() =>
-                  router.push(`/restaurants/${ticket.restaurant_id}`)
-                }
+                onPress={() => router.back()}
               >
                 <Text className="text-blue-600">View</Text>
               </TouchableOpacity>
@@ -404,16 +408,24 @@ export default function TicketDetailScreen() {
           </View>
         </View>
 
+        {/* Photos */}
         {ticket.photos && ticket.photos.length > 0 && (
-          <View className="mb-4">
-            <Text className="text-gray-700 font-medium mb-2">Photos</Text>
+          <View className="mt-4 p-4 bg-gray-50 rounded-lg">
+            <View className="flex-row items-center mb-2">
+              <ImageIcon size={18} color="#1e40af" />
+              <Text className="ml-2 text-gray-800 font-bold">Photos</Text>
+            </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               {ticket.photos.map((photo: string, index: number) => (
-                <TouchableOpacity key={index} className="mr-3">
+                <TouchableOpacity
+                  key={index}
+                  className="mr-3"
+                  onPress={() => setSelectedImage(photo)}
+                >
                   <Image
                     source={{ uri: photo }}
-                    className="w-24 h-24 rounded-lg"
-                    resizeMode="cover"
+                    style={{ width: 100, height: 100, borderRadius: 8 }}
+                    contentFit="cover"
                   />
                 </TouchableOpacity>
               ))}
@@ -421,11 +433,21 @@ export default function TicketDetailScreen() {
           </View>
         )}
 
-        {ticket.notes && (
+        {ticket.resolution && (
           <View className="mb-4">
-            <Text className="text-gray-700 font-medium mb-2">Notes</Text>
+            <Text className="text-gray-700 font-medium mb-2">Resolution</Text>
             <View className="bg-gray-50 p-3 rounded-lg">
-              <Text className="text-gray-800">{ticket.notes}</Text>
+              <Text className="text-gray-800">{ticket.resolution}</Text>
+            </View>
+          </View>
+        )}
+
+        {ticket.sla_due_at && (
+          <View className="mb-4">
+            <Text className="text-gray-700 font-medium mb-2">SLA Due</Text>
+            <View className="bg-gray-50 p-3 rounded-lg flex-row items-center">
+              <Clock size={16} color="#1e40af" className="mr-2" />
+              <Text className="text-gray-800">{formatDate(ticket.sla_due_at)}</Text>
             </View>
           </View>
         )}
@@ -443,6 +465,30 @@ export default function TicketDetailScreen() {
           onAssign={handleAssign}
           onClose={() => setShowAssignModal(false)}
         />
+      </Modal>
+
+      {/* Image Preview Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={!!selectedImage}
+        onRequestClose={() => setSelectedImage(null)}
+      >
+        <View className="flex-1 bg-black/80 justify-center items-center">
+          <TouchableOpacity
+            className="absolute top-10 right-6 z-10 bg-black/50 rounded-full p-2"
+            onPress={() => setSelectedImage(null)}
+          >
+            <X size={24} color="#ffffff" />
+          </TouchableOpacity>
+          {selectedImage && (
+            <Image
+              source={{ uri: selectedImage }}
+              style={{ width: '90%', height: '70%' }}
+              contentFit="contain"
+            />
+          )}
+        </View>
       </Modal>
     </SafeAreaView>
   );

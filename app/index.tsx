@@ -27,6 +27,7 @@ import {
   Home,
   Ticket,
   Package,
+  Utensils,
 } from "lucide-react-native";
 import TicketList from "../components/TicketList";
 import { useAuth } from "../components/AuthProvider";
@@ -43,6 +44,9 @@ export default function Dashboard() {
     inProgress: 0,
     resolved: 0,
     highPriority: 0,
+    slaCompliant: 0,
+    avgResponseTime: "N/A",
+    avgResolutionTime: "N/A",
   });
 
   useEffect(() => {
@@ -82,6 +86,9 @@ export default function Dashboard() {
         inProgress: inProgressTickets?.length || 0,
         resolved: resolvedTickets?.length || 0,
         highPriority: highPriorityTickets?.length || 0,
+        slaCompliant: 0,
+        avgResponseTime: "N/A",
+        avgResolutionTime: "N/A",
       });
     } catch (error) {
       console.error("Error:", error);
@@ -103,7 +110,7 @@ export default function Dashboard() {
   };
 
   const handleNavigation = (route: string) => {
-    router.push(route);
+    router.push(route as any);
   };
 
   return (
@@ -134,6 +141,17 @@ export default function Dashboard() {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Create Ticket Button - Added prominently at the top */}
+      <TouchableOpacity
+        className="mx-5 mt-4 bg-blue-600 rounded-xl p-4 flex-row items-center justify-center shadow-xl"
+        onPress={handleCreateTicket}
+      >
+        <Plus size={24} color="#ffffff" />
+        <Text className="text-white font-bold ml-2 text-lg">
+          Create New Ticket
+        </Text>
+      </TouchableOpacity>
 
       <ScrollView className="flex-1 bg-gray-100">
         {/* Hero Section */}
@@ -317,6 +335,26 @@ export default function Dashboard() {
 
             <TouchableOpacity
               className="bg-white rounded-2xl p-5 w-[48%] mb-4 shadow-md items-center transform transition-transform active:scale-95"
+              onPress={() => handleNavigation("/restaurants")}
+            >
+              <View className="bg-gradient-to-br from-red-100 to-red-200 p-4 rounded-full mb-3 shadow-sm">
+                <Utensils size={24} color="#dc2626" />
+              </View>
+              <Text className="text-gray-800 font-medium">Restaurants</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              className="bg-white rounded-2xl p-5 w-[48%] mb-4 shadow-md items-center transform transition-transform active:scale-95"
+              onPress={() => handleNavigation("/users")}
+            >
+              <View className="bg-gradient-to-br from-indigo-100 to-indigo-200 p-4 rounded-full mb-3 shadow-sm">
+                <User size={24} color="#4338ca" />
+              </View>
+              <Text className="text-gray-800 font-medium">Users</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              className="bg-white rounded-2xl p-5 w-[48%] mb-4 shadow-md items-center transform transition-transform active:scale-95"
               onPress={() => handleNavigation("/knowledge")}
             >
               <View className="bg-gradient-to-br from-purple-100 to-purple-200 p-4 rounded-full mb-3 shadow-sm">
@@ -451,6 +489,17 @@ export default function Dashboard() {
           <Text className="text-xs text-gray-500">Profile</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Supabase Dashboard Button */}
+      <TouchableOpacity
+        className="mx-5 mb-4 bg-gradient-to-r from-purple-600 to-purple-800 rounded-xl p-4 flex-row items-center justify-center shadow-xl"
+        onPress={() => router.push("/dashboard")}
+      >
+        <BarChart3 size={20} color="#ffffff" />
+        <Text className="text-white font-semibold ml-2">
+          View Supabase Dashboard
+        </Text>
+      </TouchableOpacity>
     </SafeAreaView>
   );
 }

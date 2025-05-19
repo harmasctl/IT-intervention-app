@@ -8,6 +8,7 @@ import {
   TextInput,
   Alert,
   Modal,
+  ScrollView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
@@ -20,15 +21,32 @@ import {
   X,
   Tag,
   Search,
+  Clock,
+  Palette,
+  Check,
+  Calendar,
 } from "lucide-react-native";
 import { supabase } from "../../lib/supabase";
+import ColorPicker from 'react-native-wheel-color-picker';
 
 type DeviceCategory = {
   id: string;
   name: string;
   description?: string;
+  icon?: string;
+  color?: string;
+  maintenance_interval?: number;
+  is_active?: boolean;
   created_at: string;
+  updated_at?: string;
 };
+
+// List of available icons
+const availableIcons = [
+  "computer", "printer", "router", "server", "phone", "tablet", "monitor", 
+  "keyboard", "mouse", "scanner", "projector", "camera", "speaker", "microphone", 
+  "headset", "tv", "cash-register", "pos", "terminal", "other"
+];
 
 export default function DeviceCategoriesScreen() {
   const router = useRouter();
@@ -46,7 +64,14 @@ export default function DeviceCategoriesScreen() {
   const [newCategory, setNewCategory] = useState({
     name: "",
     description: "",
+    icon: "computer",
+    color: "#3b82f6",
+    maintenance_interval: 90,
+    is_active: true,
   });
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const [tempColor, setTempColor] = useState("#3b82f6");
+  const [isEditingColor, setIsEditingColor] = useState(false);
 
   useEffect(() => {
     fetchCategories();
@@ -121,6 +146,10 @@ export default function DeviceCategoriesScreen() {
         {
           name: newCategory.name,
           description: newCategory.description || null,
+          icon: newCategory.icon || null,
+          color: newCategory.color || null,
+          maintenance_interval: newCategory.maintenance_interval || 90,
+          is_active: newCategory.is_active,
         },
       ]);
 
@@ -131,6 +160,10 @@ export default function DeviceCategoriesScreen() {
       setNewCategory({
         name: "",
         description: "",
+        icon: "computer",
+        color: "#3b82f6",
+        maintenance_interval: 90,
+        is_active: true,
       });
       fetchCategories();
     } catch (error) {
@@ -152,6 +185,11 @@ export default function DeviceCategoriesScreen() {
         .update({
           name: currentCategory.name,
           description: currentCategory.description || null,
+          icon: currentCategory.icon || null,
+          color: currentCategory.color || null,
+          maintenance_interval: currentCategory.maintenance_interval || 90,
+          is_active: currentCategory.is_active !== false, // Default to true if undefined
+          updated_at: new Date().toISOString(),
         })
         .eq("id", currentCategory.id);
 
@@ -168,9 +206,29 @@ export default function DeviceCategoriesScreen() {
   };
 
   const handleDeleteCategory = async (categoryId: string) => {
+    // First check if there are any devices using this category
+    try {
+      const { count, error } = await supabase
+        .from("devices")
+        .select("*", { count: "exact", head: true })
+        .eq("category_id", categoryId);
+
+      if (error) throw error;
+
+      if (count && count > 0) {
+        Alert.alert(
+          "Cannot Delete",
+          `This category is used by ${count} device(s). Please reassign these devices first.`
+        );
+        return;
+      }
+    } catch (error) {
+      console.error("Error checking devices:", error);
+    }
+
     Alert.alert(
       "Confirm Delete",
-      "Are you sure you want to delete this category? This will affect all devices in this category.",
+      "Are you sure you want to delete this category?",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -197,53 +255,108 @@ export default function DeviceCategoriesScreen() {
     );
   };
 
+  const getIconComponent = (iconName: string, size: number = 20, color: string = "#4b5563") => {
+    // You can expand this to use actual icon components based on the name
+    // For now, we'll just use the Tag icon for all
+    return <Tag size={size} color={color} />;
+  };
+
   const renderCategoryItem = ({ item }: { item: DeviceCategory }) => (
     <View className="bg-white rounded-xl p-4 mb-4 shadow-sm">
-      <View className="flex-row justify-between items-start">
+      <View className="flex-row justify-between items-center">
         <View className="flex-row items-center">
-          <View className="bg-blue-100 p-2 rounded-full mr-3">
-            <Tag size={20} color="#1e40af" />
+          <View 
+            className="p-2 rounded-full mr-3" 
+            style={{ backgroundColor: item.color || "#e5e7eb" }}
+          >
+            {getIconComponent(item.icon || "tag", 20, "#ffffff")}
           </View>
-          <View className="flex-1">
+          <View>
             <Text className="font-bold text-lg text-gray-800">{item.name}</Text>
             {item.description && (
-              <Text className="text-gray-500">{item.description}</Text>
+              <Text className="text-gray-500 text-sm">{item.description}</Text>
             )}
           </View>
         </View>
         <View className="flex-row">
           <TouchableOpacity
-            className="mr-3"
             onPress={() => {
               setCurrentCategory(item);
+              setTempColor(item.color || "#3b82f6");
               setShowEditModal(true);
             }}
+            className="p-2 mr-2 bg-blue-100 rounded-full"
           >
-            <Edit size={20} color="#1e40af" />
+            <Edit size={16} color="#1e40af" />
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => handleDeleteCategory(item.id)}>
-            <Trash2 size={20} color="#ef4444" />
+          <TouchableOpacity
+            onPress={() => handleDeleteCategory(item.id)}
+            className="p-2 bg-red-100 rounded-full"
+          >
+            <Trash2 size={16} color="#dc2626" />
           </TouchableOpacity>
+        </View>
+      </View>
+
+      <View className="mt-3 pt-3 border-t border-gray-100">
+        <View className="flex-row items-center justify-between">
+          <View className="flex-row items-center">
+            <Clock size={14} color="#4b5563" />
+            <Text className="text-gray-500 text-sm ml-1">
+              Maintenance: {item.maintenance_interval || 90} days
+            </Text>
+          </View>
+          <View className="flex-row items-center">
+            <Text className="text-gray-500 text-sm mr-1">
+              {item.is_active !== false ? "Active" : "Inactive"}
+            </Text>
+            {item.is_active !== false ? (
+              <Check size={14} color="#16a34a" />
+            ) : (
+              <X size={14} color="#dc2626" />
+            )}
+          </View>
         </View>
       </View>
     </View>
   );
+
+  const onColorChange = (color: string) => {
+    setTempColor(color);
+  };
+
+  const confirmColorSelection = () => {
+    if (isEditingColor && currentCategory) {
+      setCurrentCategory({
+        ...currentCategory,
+        color: tempColor,
+      });
+    } else {
+      setNewCategory({
+        ...newCategory,
+        color: tempColor,
+      });
+    }
+    setShowColorPicker(false);
+    setIsEditingColor(false);
+  };
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
       <StatusBar style="auto" />
 
       {/* Header */}
-      <View className="flex-row items-center px-5 py-4 bg-gradient-to-r from-blue-700 to-blue-900 shadow-lg">
-        <TouchableOpacity onPress={() => router.back()} className="mr-4">
-          <ArrowLeft size={24} color="white" />
-        </TouchableOpacity>
-        <Text className="text-2xl font-bold text-white flex-1">
-          Device Categories
-        </Text>
+      <View className="flex-row justify-between items-center px-5 py-4 bg-gradient-to-r from-blue-700 to-blue-900 shadow-lg">
         <TouchableOpacity
-          className="bg-green-600 p-2 rounded-full"
+          onPress={() => router.back()}
+          className="p-2 rounded-full bg-blue-800"
+        >
+          <ArrowLeft size={22} color="white" />
+        </TouchableOpacity>
+        <Text className="text-xl font-bold text-white">Device Categories</Text>
+        <TouchableOpacity
           onPress={() => setShowAddModal(true)}
+          className="p-2 rounded-full bg-green-600"
         >
           <Plus size={22} color="white" />
         </TouchableOpacity>
@@ -264,37 +377,25 @@ export default function DeviceCategoriesScreen() {
       </View>
 
       {/* Category List */}
-      <View className="flex-1 px-4 pt-4">
-        {loading ? (
-          <View className="flex-1 justify-center items-center">
-            <ActivityIndicator size="large" color="#1e40af" />
-            <Text className="mt-2 text-gray-600">Loading categories...</Text>
-          </View>
-        ) : filteredCategories.length > 0 ? (
-          <FlatList
-            data={filteredCategories}
-            renderItem={renderCategoryItem}
-            keyExtractor={(item) => item.id}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: 20 }}
-            refreshing={loading}
-            onRefresh={fetchCategories}
-          />
-        ) : (
-          <View className="flex-1 justify-center items-center">
-            <Tag size={48} color="#9ca3af" />
-            <Text className="mt-4 text-gray-500 text-center">
-              No categories found
-            </Text>
-            <TouchableOpacity
-              className="mt-4 bg-blue-600 px-4 py-2 rounded-lg"
-              onPress={() => setShowAddModal(true)}
-            >
-              <Text className="text-white font-medium">Add New Category</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
+      {loading ? (
+        <View className="flex-1 justify-center items-center">
+          <ActivityIndicator size="large" color="#1e40af" />
+        </View>
+      ) : filteredCategories.length > 0 ? (
+        <FlatList
+          data={filteredCategories}
+          renderItem={renderCategoryItem}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={{ padding: 16 }}
+          showsVerticalScrollIndicator={false}
+        />
+      ) : (
+        <View className="flex-1 justify-center items-center p-4">
+          <Text className="text-gray-500 text-lg text-center">
+            No categories found
+          </Text>
+        </View>
+      )}
 
       {/* Add Category Modal */}
       <Modal
@@ -303,23 +404,27 @@ export default function DeviceCategoriesScreen() {
         animationType="slide"
         onRequestClose={() => setShowAddModal(false)}
       >
-        <View className="flex-1 bg-black bg-opacity-50 justify-end">
-          <View className="bg-white rounded-t-3xl p-6">
+        <View className="flex-1 justify-end bg-black bg-opacity-50">
+          <View className="bg-white rounded-t-3xl p-6 h-5/6">
             <View className="flex-row justify-between items-center mb-6">
-              <Text className="text-xl font-bold text-gray-800">
+              <Text className="text-2xl font-bold text-gray-800">
                 Add New Category
               </Text>
-              <TouchableOpacity onPress={() => setShowAddModal(false)}>
-                <X size={24} color="#4b5563" />
+              <TouchableOpacity
+                onPress={() => setShowAddModal(false)}
+                className="bg-gray-200 rounded-full p-2"
+              >
+                <X size={20} color="#4b5563" />
               </TouchableOpacity>
             </View>
 
-            <View className="space-y-4">
-              <View>
-                <Text className="text-gray-700 mb-1 font-medium">Name *</Text>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {/* Form Fields */}
+              <View className="mb-4">
+                <Text className="text-gray-700 mb-2 font-medium">Name *</Text>
                 <TextInput
-                  className="border border-gray-300 rounded-lg px-3 py-2"
-                  placeholder="Enter category name"
+                  className="bg-gray-100 rounded-xl px-4 py-3 text-gray-800"
+                  placeholder="Category name"
                   value={newCategory.name}
                   onChangeText={(text) =>
                     setNewCategory({ ...newCategory, name: text })
@@ -327,31 +432,129 @@ export default function DeviceCategoriesScreen() {
                 />
               </View>
 
-              <View>
-                <Text className="text-gray-700 mb-1 font-medium">
-                  Description
-                </Text>
+              <View className="mb-4">
+                <Text className="text-gray-700 mb-2 font-medium">Description</Text>
                 <TextInput
-                  className="border border-gray-300 rounded-lg px-3 py-2 h-24"
-                  placeholder="Enter category description"
+                  className="bg-gray-100 rounded-xl px-4 py-3 text-gray-800"
+                  placeholder="Category description"
                   value={newCategory.description}
                   onChangeText={(text) =>
                     setNewCategory({ ...newCategory, description: text })
                   }
                   multiline
-                  textAlignVertical="top"
                 />
               </View>
 
+              <View className="mb-4">
+                <Text className="text-gray-700 mb-2 font-medium">Icon</Text>
+                <View className="flex-row flex-wrap">
+                  {availableIcons.map((icon) => (
+                    <TouchableOpacity
+                      key={icon}
+                      className={`p-3 m-1 rounded-lg ${
+                        newCategory.icon === icon
+                          ? "bg-blue-100 border border-blue-500"
+                          : "bg-gray-100"
+                      }`}
+                      onPress={() => setNewCategory({ ...newCategory, icon })}
+                    >
+                      <Text className="text-gray-800">{icon}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              <View className="mb-4">
+                <Text className="text-gray-700 mb-2 font-medium">Color</Text>
+                <TouchableOpacity
+                  className="flex-row items-center bg-gray-100 rounded-xl px-4 py-3"
+                  onPress={() => {
+                    setTempColor(newCategory.color);
+                    setIsEditingColor(false);
+                    setShowColorPicker(true);
+                  }}
+                >
+                  <View
+                    className="w-6 h-6 rounded-full mr-3"
+                    style={{ backgroundColor: newCategory.color }}
+                  />
+                  <Text className="text-gray-800">{newCategory.color}</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View className="mb-4">
+                <Text className="text-gray-700 mb-2 font-medium">
+                  Maintenance Interval (days)
+                </Text>
+                <TextInput
+                  className="bg-gray-100 rounded-xl px-4 py-3 text-gray-800"
+                  placeholder="90"
+                  value={newCategory.maintenance_interval.toString()}
+                  onChangeText={(text) => {
+                    const value = parseInt(text) || 0;
+                    setNewCategory({ ...newCategory, maintenance_interval: value });
+                  }}
+                  keyboardType="numeric"
+                />
+              </View>
+
+              <View className="mb-6">
+                <Text className="text-gray-700 mb-2 font-medium">Status</Text>
+                <View className="flex-row">
+                  <TouchableOpacity
+                    className={`flex-1 py-3 mr-2 rounded-xl flex-row justify-center items-center ${
+                      newCategory.is_active
+                        ? "bg-blue-100 border border-blue-500"
+                        : "bg-gray-100"
+                    }`}
+                    onPress={() =>
+                      setNewCategory({ ...newCategory, is_active: true })
+                    }
+                  >
+                    <Check size={16} color={newCategory.is_active ? "#1e40af" : "#4b5563"} />
+                    <Text
+                      className={`ml-1 ${
+                        newCategory.is_active
+                          ? "text-blue-700 font-medium"
+                          : "text-gray-700"
+                      }`}
+                    >
+                      Active
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    className={`flex-1 py-3 ml-2 rounded-xl flex-row justify-center items-center ${
+                      !newCategory.is_active
+                        ? "bg-blue-100 border border-blue-500"
+                        : "bg-gray-100"
+                    }`}
+                    onPress={() =>
+                      setNewCategory({ ...newCategory, is_active: false })
+                    }
+                  >
+                    <X size={16} color={!newCategory.is_active ? "#1e40af" : "#4b5563"} />
+                    <Text
+                      className={`ml-1 ${
+                        !newCategory.is_active
+                          ? "text-blue-700 font-medium"
+                          : "text-gray-700"
+                      }`}
+                    >
+                      Inactive
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
               <TouchableOpacity
-                className="bg-blue-600 py-3 rounded-lg items-center mt-4"
+                className="bg-blue-600 rounded-xl py-4 items-center mb-6"
                 onPress={handleAddCategory}
               >
                 <Text className="text-white font-bold text-lg">
                   Add Category
                 </Text>
               </TouchableOpacity>
-            </View>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -363,24 +566,28 @@ export default function DeviceCategoriesScreen() {
         animationType="slide"
         onRequestClose={() => setShowEditModal(false)}
       >
-        <View className="flex-1 bg-black bg-opacity-50 justify-end">
-          <View className="bg-white rounded-t-3xl p-6">
+        <View className="flex-1 justify-end bg-black bg-opacity-50">
+          <View className="bg-white rounded-t-3xl p-6 h-5/6">
             <View className="flex-row justify-between items-center mb-6">
-              <Text className="text-xl font-bold text-gray-800">
+              <Text className="text-2xl font-bold text-gray-800">
                 Edit Category
               </Text>
-              <TouchableOpacity onPress={() => setShowEditModal(false)}>
-                <X size={24} color="#4b5563" />
+              <TouchableOpacity
+                onPress={() => setShowEditModal(false)}
+                className="bg-gray-200 rounded-full p-2"
+              >
+                <X size={20} color="#4b5563" />
               </TouchableOpacity>
             </View>
 
             {currentCategory && (
-              <View className="space-y-4">
-                <View>
-                  <Text className="text-gray-700 mb-1 font-medium">Name *</Text>
+              <ScrollView showsVerticalScrollIndicator={false}>
+                {/* Form Fields */}
+                <View className="mb-4">
+                  <Text className="text-gray-700 mb-2 font-medium">Name *</Text>
                   <TextInput
-                    className="border border-gray-300 rounded-lg px-3 py-2"
-                    placeholder="Enter category name"
+                    className="bg-gray-100 rounded-xl px-4 py-3 text-gray-800"
+                    placeholder="Category name"
                     value={currentCategory.name}
                     onChangeText={(text) =>
                       setCurrentCategory({ ...currentCategory, name: text })
@@ -388,35 +595,179 @@ export default function DeviceCategoriesScreen() {
                   />
                 </View>
 
-                <View>
-                  <Text className="text-gray-700 mb-1 font-medium">
-                    Description
-                  </Text>
+                <View className="mb-4">
+                  <Text className="text-gray-700 mb-2 font-medium">Description</Text>
                   <TextInput
-                    className="border border-gray-300 rounded-lg px-3 py-2 h-24"
-                    placeholder="Enter category description"
+                    className="bg-gray-100 rounded-xl px-4 py-3 text-gray-800"
+                    placeholder="Category description"
                     value={currentCategory.description || ""}
                     onChangeText={(text) =>
-                      setCurrentCategory({
-                        ...currentCategory,
-                        description: text,
-                      })
+                      setCurrentCategory({ ...currentCategory, description: text })
                     }
                     multiline
-                    textAlignVertical="top"
                   />
                 </View>
 
+                <View className="mb-4">
+                  <Text className="text-gray-700 mb-2 font-medium">Icon</Text>
+                  <View className="flex-row flex-wrap">
+                    {availableIcons.map((icon) => (
+                      <TouchableOpacity
+                        key={icon}
+                        className={`p-3 m-1 rounded-lg ${
+                          currentCategory.icon === icon
+                            ? "bg-blue-100 border border-blue-500"
+                            : "bg-gray-100"
+                        }`}
+                        onPress={() => setCurrentCategory({ ...currentCategory, icon })}
+                      >
+                        <Text className="text-gray-800">{icon}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                <View className="mb-4">
+                  <Text className="text-gray-700 mb-2 font-medium">Color</Text>
+                  <TouchableOpacity
+                    className="flex-row items-center bg-gray-100 rounded-xl px-4 py-3"
+                    onPress={() => {
+                      setTempColor(currentCategory.color || "#3b82f6");
+                      setIsEditingColor(true);
+                      setShowColorPicker(true);
+                    }}
+                  >
+                    <View
+                      className="w-6 h-6 rounded-full mr-3"
+                      style={{ backgroundColor: currentCategory.color || "#3b82f6" }}
+                    />
+                    <Text className="text-gray-800">{currentCategory.color || "#3b82f6"}</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View className="mb-4">
+                  <Text className="text-gray-700 mb-2 font-medium">
+                    Maintenance Interval (days)
+                  </Text>
+                  <TextInput
+                    className="bg-gray-100 rounded-xl px-4 py-3 text-gray-800"
+                    placeholder="90"
+                    value={(currentCategory.maintenance_interval || 90).toString()}
+                    onChangeText={(text) => {
+                      const value = parseInt(text) || 0;
+                      setCurrentCategory({ ...currentCategory, maintenance_interval: value });
+                    }}
+                    keyboardType="numeric"
+                  />
+                </View>
+
+                <View className="mb-4">
+                  <Text className="text-gray-700 mb-2 font-medium">Status</Text>
+                  <View className="flex-row">
+                    <TouchableOpacity
+                      className={`flex-1 py-3 mr-2 rounded-xl flex-row justify-center items-center ${
+                        currentCategory.is_active !== false
+                          ? "bg-blue-100 border border-blue-500"
+                          : "bg-gray-100"
+                      }`}
+                      onPress={() =>
+                        setCurrentCategory({ ...currentCategory, is_active: true })
+                      }
+                    >
+                      <Check size={16} color={currentCategory.is_active !== false ? "#1e40af" : "#4b5563"} />
+                      <Text
+                        className={`ml-1 ${
+                          currentCategory.is_active !== false
+                            ? "text-blue-700 font-medium"
+                            : "text-gray-700"
+                        }`}
+                      >
+                        Active
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      className={`flex-1 py-3 ml-2 rounded-xl flex-row justify-center items-center ${
+                        currentCategory.is_active === false
+                          ? "bg-blue-100 border border-blue-500"
+                          : "bg-gray-100"
+                      }`}
+                      onPress={() =>
+                        setCurrentCategory({ ...currentCategory, is_active: false })
+                      }
+                    >
+                      <X size={16} color={currentCategory.is_active === false ? "#1e40af" : "#4b5563"} />
+                      <Text
+                        className={`ml-1 ${
+                          currentCategory.is_active === false
+                            ? "text-blue-700 font-medium"
+                            : "text-gray-700"
+                        }`}
+                      >
+                        Inactive
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {currentCategory.created_at && (
+                  <View className="mb-4 flex-row items-center">
+                    <Calendar size={16} color="#4b5563" />
+                    <Text className="text-gray-500 ml-2">
+                      Created: {new Date(currentCategory.created_at).toLocaleDateString()}
+                    </Text>
+                  </View>
+                )}
+
                 <TouchableOpacity
-                  className="bg-blue-600 py-3 rounded-lg items-center mt-4"
+                  className="bg-blue-600 rounded-xl py-4 items-center mb-6"
                   onPress={handleEditCategory}
                 >
                   <Text className="text-white font-bold text-lg">
-                    Update Category
+                    Save Changes
                   </Text>
                 </TouchableOpacity>
-              </View>
+              </ScrollView>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Color Picker Modal */}
+      <Modal
+        visible={showColorPicker}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowColorPicker(false)}
+      >
+        <View className="flex-1 justify-center items-center bg-black bg-opacity-50 p-4">
+          <View className="bg-white rounded-xl p-6 w-full">
+            <Text className="text-xl font-bold text-gray-800 mb-4">
+              Select Color
+            </Text>
+            <View className="h-64 w-full">
+              <ColorPicker
+                color={tempColor}
+                onColorChange={onColorChange}
+                thumbSize={40}
+                sliderSize={40}
+                noSnap={true}
+                row={false}
+              />
+            </View>
+            <View className="flex-row justify-end mt-6">
+              <TouchableOpacity
+                className="bg-gray-200 rounded-lg px-4 py-2 mr-2"
+                onPress={() => setShowColorPicker(false)}
+              >
+                <Text className="text-gray-800 font-medium">Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                className="bg-blue-600 rounded-lg px-4 py-2"
+                onPress={confirmColorSelection}
+              >
+                <Text className="text-white font-medium">Select</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
