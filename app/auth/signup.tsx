@@ -5,195 +5,208 @@ import {
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import { useRouter } from "expo-router";
-import { Lock, Mail, User, ChevronDown, ChevronUp } from "lucide-react-native";
-import { useAuth } from "../../components/AuthProvider";
+import { Link, useRouter } from "expo-router";
+import { Eye, EyeOff, ArrowLeft } from "lucide-react-native";
+import { supabase } from "../../lib/supabase";
 
-export default function SignUpScreen() {
+export default function SignupScreen() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
-  const [role, setRole] = useState("");
-  const [showRoleOptions, setShowRoleOptions] = useState(false);
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [fullName, setFullName] = useState("");
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
-  const { signUp } = useAuth();
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const roles = [
-    { value: "technician", label: "Technician" },
-    { value: "software_tech", label: "Software Tech" },
-    { value: "admin", label: "Admin" },
-    { value: "manager", label: "Manager" },
-    { value: "restaurant_staff", label: "Restaurant Staff" },
-    { value: "warehouse", label: "Warehouse Personnel" },
-  ];
-
-  const handleSignUp = async () => {
-    if (!email || !password || !name || !role) {
+  const handleSignup = async () => {
+    if (!email || !password || !confirmPassword || !fullName) {
       Alert.alert("Error", "Please fill in all fields");
       return;
     }
 
-    // Basic validation
+    if (password !== confirmPassword) {
+      Alert.alert("Error", "Passwords do not match");
+      return;
+    }
+
     if (password.length < 6) {
       Alert.alert("Error", "Password must be at least 6 characters long");
       return;
     }
 
-    if (!email.includes("@") || !email.includes(".")) {
-      Alert.alert("Error", "Please enter a valid email address");
-      return;
-    }
-
     setLoading(true);
     try {
-      const { error } = await signUp(email, password, { name, role });
-      if (error) {
-        Alert.alert("Sign Up Failed", error.message);
-      } else {
+      // Register the user
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+
+      if (authError) throw authError;
+
+      if (authData && authData.user) {
+        // Insert user profile
+        const { error: profileError } = await supabase
+          .from("profiles")
+          .insert([
+            {
+              id: authData.user.id,
+              full_name: fullName,
+              email: email,
+              created_at: new Date().toISOString(),
+            },
+          ]);
+
+        if (profileError) throw profileError;
+
         Alert.alert(
-          "Sign Up Successful",
-          "Your account has been created. Please check your email for verification.",
-          [{ text: "OK", onPress: () => router.replace("/auth/login") }],
+          "Success",
+          "Your account has been created. Please check your email to verify your account.",
+          [{ text: "OK", onPress: () => router.push("/auth/login") }]
         );
       }
     } catch (error: any) {
-      Alert.alert("Error", error.message || "An unexpected error occurred");
+      console.error("Signup error:", error);
+      Alert.alert("Error", error.message || "Failed to create account");
     } finally {
       setLoading(false);
     }
   };
 
-  const navigateToLogin = () => {
-    router.push("/auth/login");
-  };
-
-  const getRoleLabel = (value: string) => {
-    const roleObj = roles.find((r) => r.value === value);
-    return roleObj ? roleObj.label : "Select Role";
-  };
-
   return (
     <SafeAreaView className="flex-1 bg-white">
-      <StatusBar style="auto" />
-      <ScrollView className="flex-1 px-6">
-        <View className="items-center my-10">
-          <Text className="text-3xl font-bold text-blue-800 mb-2">
-            Create Account
-          </Text>
-          <Text className="text-gray-500 text-center">
-            Join the restaurant equipment support team
-          </Text>
-        </View>
-
-        <View className="mb-4">
-          <Text className="text-gray-700 mb-2 font-medium">Full Name</Text>
-          <View className="flex-row items-center bg-gray-100 rounded-lg px-3 py-2">
-            <User size={20} color="#6b7280" />
-            <TextInput
-              className="flex-1 ml-2 py-2 text-base"
-              placeholder="Enter your full name"
-              value={name}
-              onChangeText={setName}
-            />
-          </View>
-        </View>
-
-        <View className="mb-4">
-          <Text className="text-gray-700 mb-2 font-medium">Email</Text>
-          <View className="flex-row items-center bg-gray-100 rounded-lg px-3 py-2">
-            <Mail size={20} color="#6b7280" />
-            <TextInput
-              className="flex-1 ml-2 py-2 text-base"
-              placeholder="Enter your email"
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-            />
-          </View>
-        </View>
-
-        <View className="mb-4">
-          <Text className="text-gray-700 mb-2 font-medium">Password</Text>
-          <View className="flex-row items-center bg-gray-100 rounded-lg px-3 py-2">
-            <Lock size={20} color="#6b7280" />
-            <TextInput
-              className="flex-1 ml-2 py-2 text-base"
-              placeholder="Create a password"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-            />
-          </View>
-        </View>
-
-        <View className="mb-8">
-          <Text className="text-gray-700 mb-2 font-medium">Role</Text>
+      <StatusBar style="dark" />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        className="flex-1"
+      >
+        <ScrollView className="flex-1 p-6">
           <TouchableOpacity
-            className="flex-row justify-between items-center bg-gray-100 rounded-lg px-3 py-3"
-            onPress={() => setShowRoleOptions(!showRoleOptions)}
+            onPress={() => router.back()}
+            className="flex-row items-center mb-6"
           >
-            <Text className={role ? "text-black" : "text-gray-400"}>
-              {role ? getRoleLabel(role) : "Select your role"}
+            <ArrowLeft size={20} color="#3b82f6" />
+            <Text className="text-blue-500 ml-1">Back</Text>
+          </TouchableOpacity>
+
+          <View className="items-center mb-10">
+            <Text className="text-blue-800 text-3xl font-bold mb-2">
+              Create Account
             </Text>
-            {showRoleOptions ? (
-              <ChevronUp size={20} color="#6b7280" />
+            <Text className="text-gray-500 text-center">
+              Sign up to start managing IT interventions
+            </Text>
+          </View>
+
+          <View className="space-y-4 mb-6">
+            <View>
+              <Text className="text-gray-700 mb-2 font-medium">Full Name</Text>
+              <TextInput
+                className="bg-gray-100 py-3 px-4 rounded-xl"
+                placeholder="Enter your full name"
+                value={fullName}
+                onChangeText={setFullName}
+                autoCapitalize="words"
+              />
+            </View>
+
+            <View>
+              <Text className="text-gray-700 mb-2 font-medium">Email</Text>
+              <TextInput
+                className="bg-gray-100 py-3 px-4 rounded-xl"
+                placeholder="Enter your email"
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            </View>
+
+            <View>
+              <Text className="text-gray-700 mb-2 font-medium">Password</Text>
+              <View className="flex-row items-center bg-gray-100 py-3 px-4 rounded-xl">
+                <TextInput
+                  className="flex-1"
+                  placeholder="Enter your password"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                />
+                <TouchableOpacity
+                  onPress={() => setShowPassword(!showPassword)}
+                  className="ml-2"
+                >
+                  {showPassword ? (
+                    <EyeOff size={20} color="#6b7280" />
+                  ) : (
+                    <Eye size={20} color="#6b7280" />
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View>
+              <Text className="text-gray-700 mb-2 font-medium">
+                Confirm Password
+              </Text>
+              <View className="flex-row items-center bg-gray-100 py-3 px-4 rounded-xl">
+                <TextInput
+                  className="flex-1"
+                  placeholder="Confirm your password"
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  secureTextEntry={!showConfirmPassword}
+                  autoCapitalize="none"
+                />
+                <TouchableOpacity
+                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="ml-2"
+                >
+                  {showConfirmPassword ? (
+                    <EyeOff size={20} color="#6b7280" />
+                  ) : (
+                    <Eye size={20} color="#6b7280" />
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            className={`py-4 rounded-xl mb-6 ${
+              loading ? "bg-blue-400" : "bg-blue-600"
+            }`}
+            onPress={handleSignup}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="white" />
             ) : (
-              <ChevronDown size={20} color="#6b7280" />
+              <Text className="text-white font-bold text-center text-lg">
+                Sign Up
+              </Text>
             )}
           </TouchableOpacity>
 
-          {showRoleOptions && (
-            <View className="bg-white border border-gray-200 rounded-lg mt-1 shadow-sm">
-              {roles.map((roleOption) => (
-                <TouchableOpacity
-                  key={roleOption.value}
-                  className={`p-3 border-b border-gray-100 ${role === roleOption.value ? "bg-blue-50" : ""}`}
-                  onPress={() => {
-                    setRole(roleOption.value);
-                    setShowRoleOptions(false);
-                  }}
-                >
-                  <Text
-                    className={
-                      role === roleOption.value
-                        ? "text-blue-600"
-                        : "text-gray-800"
-                    }
-                  >
-                    {roleOption.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-        </View>
-
-        <TouchableOpacity
-          className="bg-blue-600 py-3 rounded-lg items-center mb-4"
-          onPress={handleSignUp}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color="white" />
-          ) : (
-            <Text className="text-white font-semibold text-lg">Sign Up</Text>
-          )}
-        </TouchableOpacity>
-
-        <View className="flex-row justify-center mb-10">
-          <Text className="text-gray-600">Already have an account? </Text>
-          <TouchableOpacity onPress={navigateToLogin}>
-            <Text className="text-blue-600 font-medium">Sign In</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
+          <View className="flex-row justify-center">
+            <Text className="text-gray-600">Already have an account? </Text>
+            <Link href="/auth/login" asChild>
+              <TouchableOpacity>
+                <Text className="text-blue-600 font-semibold">Log In</Text>
+              </TouchableOpacity>
+            </Link>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

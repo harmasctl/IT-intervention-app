@@ -1,142 +1,169 @@
-import React, { useState } from "react";
-import { View, Text, TouchableOpacity, Alert, TextInput } from "react-native";
+import React, { useState, useEffect } from "react";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  ActivityIndicator,
+  Alert,
+  StyleSheet,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { useRouter } from "expo-router";
-import { ArrowLeft, Barcode, Search } from "lucide-react-native";
-import BarcodeScanner from "../../components/BarcodeScanner";
+import { ArrowLeft, Scan, QrCode } from "lucide-react-native";
 import { supabase } from "../../lib/supabase";
+import { BarCodeScanner } from "expo-barcode-scanner";
 
-export default function ScanDeviceScreen() {
+export default function ScanScreen() {
   const router = useRouter();
-  const [showScanner, setShowScanner] = useState(false);
-  const [serialNumber, setSerialNumber] = useState("");
-  const [scanning, setScanning] = useState(false);
+  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+  const [scanned, setScanned] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const handleScan = async (data: string, type: string) => {
-    setShowScanner(false);
-    setSerialNumber(data);
-    searchDevice(data);
-  };
+  useEffect(() => {
+    const getBarCodeScannerPermissions = async () => {
+      const { status } = await BarCodeScanner.requestPermissionsAsync();
+      setHasPermission(status === "granted");
+    };
 
-  const searchDevice = async (serial: string) => {
-    if (!serial) {
-      Alert.alert("Error", "Please enter a serial number");
-      return;
-    }
+    getBarCodeScannerPermissions();
+  }, []);
 
+  const handleBarCodeScanned = async ({ type, data }: { type: string; data: string }) => {
+    setScanned(true);
+    
     try {
-      setScanning(true);
-      const { data, error } = await supabase
+      // Try to parse QR code data - expecting JSON with device ID
+      let deviceData;
+      try {
+        deviceData = JSON.parse(data);
+      } catch (e) {
+        // If it's not JSON, check if it's just a direct ID
+        deviceData = { id: data };
+      }
+
+      if (!deviceData.id) {
+        throw new Error("Invalid QR code - no device ID found");
+      }
+
+      setLoading(true);
+      
+      // Verify the device exists
+      const { data: device, error } = await supabase
         .from("devices")
-        .select("*")
-        .eq("serial_number", serial)
+        .select("id, name")
+        .eq("id", deviceData.id)
         .single();
 
-      if (error) {
-        if (error.code === "PGRST116") {
-          // No rows returned
-          Alert.alert(
-            "Device Not Found",
-            "No device found with this serial number. Would you like to add it?",
-            [
-              { text: "Cancel", style: "cancel" },
-              {
-                text: "Add Device",
-                onPress: () =>
-                  router.push({
-                    pathname: "/devices/create",
-                    params: { serial: serial },
-                  }),
-              },
-            ],
-          );
-        } else {
-          throw error;
-        }
-      } else if (data) {
-        // Device found, navigate to device details
-        router.push(`/devices/${data.id}`);
+      if (error || !device) {
+        throw new Error("Device not found in database");
       }
+
+      // Navigate to device details
+      router.push({
+        pathname: "/devices/[id]",
+        params: { id: device.id }
+      });
     } catch (error) {
-      console.error("Error searching device:", error);
-      Alert.alert("Error", "Failed to search for device");
-    } finally {
-      setScanning(false);
+      console.error("Error processing QR code:", error);
+      Alert.alert(
+        "Invalid QR Code", 
+        "This QR code doesn't match any device in the system.",
+        [
+          {
+            text: "Scan Again",
+            onPress: () => setScanned(false),
+          },
+          {
+            text: "Cancel",
+            onPress: () => router.back(),
+            style: "cancel",
+          },
+        ]
+      );
+      setLoading(false);
     }
   };
 
+  if (hasPermission === null) {
+    return (
+      <SafeAreaView className="flex-1 bg-gray-900 justify-center items-center">
+        <StatusBar style="light" />
+        <ActivityIndicator size="large" color="#FFFFFF" />
+        <Text className="text-white mt-4">Requesting camera permission...</Text>
+      </SafeAreaView>
+    );
+  }
+
+  if (hasPermission === false) {
+    return (
+      <SafeAreaView className="flex-1 bg-gray-900 justify-center items-center p-4">
+        <StatusBar style="light" />
+        <QrCode size={80} color="#FFFFFF" />
+        <Text className="text-white text-xl font-bold mt-6 text-center">
+          Camera Permission Required
+        </Text>
+        <Text className="text-gray-300 mt-2 text-center mb-6">
+          Please grant camera permission to scan device QR codes.
+        </Text>
+        <TouchableOpacity
+          className="bg-blue-500 py-3 px-6 rounded-lg"
+          onPress={() => router.back()}
+        >
+          <Text className="text-white font-medium">Go Back</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
+
   return (
-    <SafeAreaView className="flex-1 bg-white">
-      <StatusBar style="auto" />
-
-      {showScanner ? (
-        <BarcodeScanner
-          onScan={handleScan}
-          onClose={() => setShowScanner(false)}
-        />
-      ) : (
-        <>
-          {/* Header */}
-          <View className="flex-row items-center px-5 py-4 bg-gradient-to-r from-blue-700 to-blue-900 shadow-lg">
-            <TouchableOpacity onPress={() => router.back()} className="mr-4">
-              <ArrowLeft size={24} color="white" />
-            </TouchableOpacity>
-            <Text className="text-2xl font-bold text-white flex-1">
-              Scan Device
-            </Text>
-          </View>
-
-          <View className="flex-1 p-6">
-            <View className="bg-blue-50 p-4 rounded-lg mb-8">
-              <Text className="text-blue-800">
-                Scan a device's serial number or enter it manually to find it in
-                the system.
-              </Text>
+    <View className="flex-1 bg-gray-900">
+      <StatusBar style="light" />
+      
+      <BarCodeScanner
+        style={StyleSheet.absoluteFillObject}
+        onBarCodeScanned={scanned ? undefined : handleBarCodeScanned}
+        barCodeTypes={[BarCodeScanner.Constants.BarCodeType.qr]}
+      />
+      
+      <SafeAreaView className="flex-1">
+        <View className="flex-row justify-between items-center p-4">
+          <TouchableOpacity
+            className="bg-black bg-opacity-50 p-2 rounded-full"
+            onPress={() => router.back()}
+          >
+            <ArrowLeft size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+        
+        <View className="flex-1 justify-center items-center">
+          {loading ? (
+            <View className="bg-black bg-opacity-70 p-6 rounded-xl">
+              <ActivityIndicator size="large" color="#FFFFFF" />
+              <Text className="text-white mt-4">Finding device...</Text>
             </View>
-
-            <View className="mb-8">
-              <Text className="text-gray-700 mb-2 font-medium">
-                Serial Number
+          ) : (
+            <>
+              <View className="w-64 h-64 border-2 border-white rounded-lg" />
+              <Text className="text-white font-medium mt-6">
+                Scan a device QR code
               </Text>
-              <View className="flex-row">
-                <TextInput
-                  className="border border-gray-300 rounded-l-lg px-3 py-2 flex-1"
-                  placeholder="Enter serial number"
-                  value={serialNumber}
-                  onChangeText={setSerialNumber}
-                />
-                <TouchableOpacity
-                  className="bg-blue-500 rounded-r-lg px-4 items-center justify-center"
-                  onPress={() => setShowScanner(true)}
-                >
-                  <Barcode size={24} color="white" />
-                </TouchableOpacity>
-              </View>
-            </View>
-
+            </>
+          )}
+        </View>
+        
+        {scanned && !loading && (
+          <View className="items-center pb-8">
             <TouchableOpacity
-              className="bg-blue-600 py-3 rounded-lg items-center mb-6 flex-row justify-center"
-              onPress={() => searchDevice(serialNumber)}
-              disabled={scanning || !serialNumber}
+              className="bg-blue-500 py-3 px-6 rounded-lg flex-row items-center"
+              onPress={() => setScanned(false)}
             >
-              <Search size={20} color="white" className="mr-2" />
-              <Text className="text-white font-bold text-lg">
-                {scanning ? "Searching..." : "Search Device"}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              className="bg-green-600 py-3 rounded-lg items-center flex-row justify-center"
-              onPress={() => router.push("/devices/create")}
-            >
-              <Text className="text-white font-bold text-lg">
-                Add New Device
-              </Text>
+              <Scan size={20} color="#FFFFFF" className="mr-2" />
+              <Text className="text-white font-medium">Scan Again</Text>
             </TouchableOpacity>
           </View>
-        </>
-      )}
-    </SafeAreaView>
+        )}
+      </SafeAreaView>
+    </View>
   );
 }

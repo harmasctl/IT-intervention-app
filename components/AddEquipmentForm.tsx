@@ -6,9 +6,11 @@ import {
   TouchableOpacity,
   Alert,
   ScrollView,
+  Modal,
 } from "react-native";
 import { ArrowLeft, Camera, X } from "lucide-react-native";
 import { supabase } from "../lib/supabase";
+import BarcodeScanner from "../components/BarcodeScanner";
 
 type AddEquipmentFormProps = {
   onCancel: () => void;
@@ -30,6 +32,8 @@ export default function AddEquipmentForm({
   const [warehouseLocation, setWarehouseLocation] = useState("");
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
+  const [barcodeId, setBarcodeId] = useState("");
 
   const equipmentTypes = [
     "Spare Parts",
@@ -266,12 +270,11 @@ export default function AddEquipmentForm({
       >
         <View style={{ flex: 1 }}>
           <BarcodeScanner
-            onScan={(data) => {
+            onScan={(data, type) => {
               setBarcodeId(data);
               setShowBarcodeScanner(false);
             }}
             onClose={() => setShowBarcodeScanner(false)}
-            mode="equipment"
           />
         </View>
       </Modal>

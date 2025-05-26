@@ -28,6 +28,7 @@ import {
   Ticket,
   Package,
   Utensils,
+  Map,
 } from "lucide-react-native";
 import TicketList from "../components/TicketList";
 import { useAuth } from "../components/AuthProvider";
@@ -345,12 +346,12 @@ export default function Dashboard() {
 
             <TouchableOpacity
               className="bg-white rounded-2xl p-5 w-[48%] mb-4 shadow-md items-center transform transition-transform active:scale-95"
-              onPress={() => handleNavigation("/users")}
+              onPress={() => handleNavigation("/restaurants/device-map")}
             >
-              <View className="bg-gradient-to-br from-indigo-100 to-indigo-200 p-4 rounded-full mb-3 shadow-sm">
-                <User size={24} color="#4338ca" />
+              <View className="bg-gradient-to-br from-purple-100 to-purple-200 p-4 rounded-full mb-3 shadow-sm">
+                <Map size={24} color="#7e22ce" />
               </View>
-              <Text className="text-gray-800 font-medium">Users</Text>
+              <Text className="text-gray-800 font-medium">Device Map</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -499,6 +500,17 @@ export default function Dashboard() {
         <Text className="text-white font-semibold ml-2">
           View Supabase Dashboard
         </Text>
+      </TouchableOpacity>
+
+      {/* Add a direct link to the device map for testing */}
+      <TouchableOpacity
+        className="bg-blue-500 p-4 rounded-lg mt-4"
+        onPress={() => {
+          console.log("Navigating to test device map");
+          router.push("/test-device-map");
+        }}
+      >
+        <Text className="text-white text-center font-bold">Test Restaurant Device Map</Text>
       </TouchableOpacity>
     </SafeAreaView>
   );

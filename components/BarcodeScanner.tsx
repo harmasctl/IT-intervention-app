@@ -2,20 +2,22 @@ import React, { useState, useEffect } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from "react-native";
 import { Camera } from "expo-camera";
 import { BarCodeScanner } from "expo-barcode-scanner";
-import { X, ZoomIn, ZoomOut, FlipCamera } from "lucide-react-native";
+import { X, ZoomIn, ZoomOut, RefreshCcw } from "lucide-react-native";
 
 type BarcodeScannerProps = {
   onScan: (data: string, type: string) => void;
   onClose: () => void;
+  mode?: string;
 };
 
 export default function BarcodeScanner({
   onScan,
   onClose,
+  mode,
 }: BarcodeScannerProps) {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [scanned, setScanned] = useState(false);
-  const [cameraType, setCameraType] = useState(Camera.Constants.Type.back);
+  const [cameraType, setCameraType] = useState(BarCodeScanner.Constants.Type.back);
   const [zoom, setZoom] = useState(0);
   const [torch, setTorch] = useState(false);
 
@@ -39,9 +41,9 @@ export default function BarcodeScanner({
 
   const toggleCameraType = () => {
     setCameraType(
-      cameraType === Camera.Constants.Type.back
-        ? Camera.Constants.Type.front
-        : Camera.Constants.Type.back,
+      cameraType === BarCodeScanner.Constants.Type.back
+        ? BarCodeScanner.Constants.Type.front
+        : BarCodeScanner.Constants.Type.back,
     );
   };
 
@@ -85,22 +87,16 @@ export default function BarcodeScanner({
 
   return (
     <View className="flex-1">
-      <Camera
+      <BarCodeScanner
         style={StyleSheet.absoluteFillObject}
         type={cameraType}
-        barCodeScannerSettings={{
-          barCodeTypes: [
-            BarCodeScanner.Constants.BarCodeType.qr,
-            BarCodeScanner.Constants.BarCodeType.code128,
-          ],
-        }}
+        barCodeTypes={[
+          BarCodeScanner.Constants.BarCodeType.qr,
+          BarCodeScanner.Constants.BarCodeType.code128,
+        ]}
         onBarCodeScanned={scanned ? undefined : handleBarCodeScanned}
-        zoom={zoom}
-        flashMode={
-          torch
-            ? Camera.Constants.FlashMode.torch
-            : Camera.Constants.FlashMode.off
-        }
+        // Zoom is only supported on some devices/platforms
+        // flashMode works differently - we may need a different approach
       >
         <View className="flex-1 flex-row">
           <View className="flex-1" />
@@ -151,7 +147,7 @@ export default function BarcodeScanner({
             className="bg-black bg-opacity-50 p-3 rounded-full"
             onPress={toggleCameraType}
           >
-            <FlipCamera size={24} color="white" />
+            <RefreshCcw size={24} color="white" />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -172,7 +168,7 @@ export default function BarcodeScanner({
             </TouchableOpacity>
           </View>
         )}
-      </Camera>
+      </BarCodeScanner>
     </View>
   );
 }

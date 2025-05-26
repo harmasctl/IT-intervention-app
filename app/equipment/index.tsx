@@ -713,7 +713,7 @@ export default function EquipmentInventoryScreen() {
       </View>
 
       {/* Equipment Tabs */}
-      <EquipmentTabs active="inventory" />
+      <EquipmentTabs activeTab="inventory" />
 
       {/* Action Buttons */}
       <View className="flex-row px-4 py-3 bg-white">
@@ -769,8 +769,8 @@ export default function EquipmentInventoryScreen() {
         onRequestClose={() => setShowAddEquipmentForm(false)}
       >
         <AddEquipmentForm
-          onClose={() => setShowAddEquipmentForm(false)}
-          onSave={() => {
+          onCancel={() => setShowAddEquipmentForm(false)}
+          onSuccess={() => {
             setShowAddEquipmentForm(false);
             fetchEquipment();
           }}
@@ -787,11 +787,11 @@ export default function EquipmentInventoryScreen() {
         {selectedEquipment && (
           <EquipmentMovementForm
             equipment={selectedEquipment}
-            onClose={() => {
+            onCancel={() => {
               setShowMovementForm(false);
               setSelectedEquipment(null);
             }}
-            onSave={() => {
+            onSuccess={() => {
               setShowMovementForm(false);
               setSelectedEquipment(null);
               fetchEquipment();
@@ -809,12 +809,7 @@ export default function EquipmentInventoryScreen() {
       >
         <BarcodeScanner
           onClose={() => setShowBarcodeScanner(false)}
-          onScan={handleBarcodeScan}
-          title={
-            scanMode === "equipment"
-              ? "Scan Equipment Barcode"
-              : "Scan for Stock Movement"
-          }
+          onScan={(data, type) => handleBarcodeScan(data)}
         />
       </Modal>
     </SafeAreaView>

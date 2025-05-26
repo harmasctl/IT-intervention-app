@@ -8,7 +8,11 @@ import "react-native-reanimated";
 import "../global.css";
 import { Platform } from "react-native";
 import { AuthProvider, useAuth } from "../components/AuthProvider";
-import { supabase } from "../lib/supabase";
+import { supabase, ensureStorageBuckets } from "../lib/supabase";
+import { OfflineProvider } from "../components/OfflineManager";
+import NetworkStatusIndicator from "../components/NetworkStatusIndicator";
+import MaintenanceManager from "../components/MaintenanceManager";
+import { AppState, AppStateStatus } from 'react-native';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -182,10 +186,15 @@ function RootLayoutNav() {
         name="devices/categories"
         options={{ headerShown: false }}
       />
+      <Stack.Screen
+        name="devices/models"
+        options={{ headerShown: false }}
+      />
       <Stack.Screen name="profile/index" options={{ headerShown: false }} />
       <Stack.Screen name="auth/login" options={{ headerShown: false }} />
       <Stack.Screen name="auth/signup" options={{ headerShown: false }} />
       <Stack.Screen name="schedule/index" options={{ headerShown: false }} />
+      <Stack.Screen name="schedule/maintenance" options={{ headerShown: false }} />
       <Stack.Screen name="equipment/index" options={{ headerShown: false }} />
       <Stack.Screen name="equipment/history" options={{ headerShown: false }} />
       <Stack.Screen
@@ -200,11 +209,15 @@ function RootLayoutNav() {
       <Stack.Screen name="schedule/create" options={{ headerShown: false }} />
       <Stack.Screen name="restaurants/index" options={{ headerShown: false }} />
       <Stack.Screen name="restaurants/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="restaurants/device-map" options={{ headerShown: false }} />
+      <Stack.Screen name="restaurants/simple-map" options={{ headerShown: false }} />
+      <Stack.Screen name="test-device-map" options={{ headerShown: false }} />
       <Stack.Screen name="admin/index" options={{ headerShown: false }} />
       <Stack.Screen
         name="notifications/index"
         options={{ headerShown: false }}
       />
+      <Stack.Screen name="notification-handler" options={{ headerShown: false }} />
       <Stack.Screen name="users/index" options={{ headerShown: false }} />
       <Stack.Screen name="users/[id]" options={{ headerShown: false }} />
     </Stack>
@@ -212,9 +225,33 @@ function RootLayoutNav() {
 }
 
 export default function RootLayout() {
-  const [loaded] = useFonts({
+  const [loaded, error] = useFonts({
     SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
   });
+
+  // Initialize app functionality
+  useEffect(() => {
+    const initializeApp = async () => {
+      try {
+        // Ensure storage buckets are created
+        if (typeof ensureStorageBuckets === "function") {
+          ensureStorageBuckets();
+        } else {
+          console.warn("ensureStorageBuckets not defined");
+        }
+
+        // Hide splash screen after initialization is complete
+        SplashScreen.hideAsync();
+      } catch (e) {
+        console.error("Error during app initialization:", e);
+        SplashScreen.hideAsync();
+      }
+    };
+
+    if (loaded) {
+      initializeApp();
+    }
+  }, [loaded]);
 
   useEffect(() => {
     if (process.env.EXPO_PUBLIC_TEMPO && Platform.OS === "web") {
@@ -229,12 +266,6 @@ export default function RootLayout() {
     }
   }, []);
 
-  useEffect(() => {
-    if (loaded) {
-      SplashScreen.hideAsync();
-    }
-  }, [loaded]);
-
   if (!loaded) {
     return null;
   }
@@ -242,9 +273,13 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={DefaultTheme}>
       <AuthProvider>
-        <NotificationProvider>
-          <RootLayoutNav />
-        </NotificationProvider>
+        <OfflineProvider>
+          <NotificationProvider>
+            <RootLayoutNav />
+            <NetworkStatusIndicator />
+            {Platform.OS !== 'web' && <MaintenanceManager />}
+          </NotificationProvider>
+        </OfflineProvider>
       </AuthProvider>
       <StatusBar style="auto" />
     </ThemeProvider>

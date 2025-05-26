@@ -40,34 +40,120 @@ export async function signOut() {
 // Helper function to ensure storage buckets exist
 export async function ensureStorageBuckets() {
   try {
-    // Check if the ticket-photos bucket exists
-    const { data: buckets, error } = await supabase.storage.listBuckets();
+    // Get list of existing buckets
+    const { data: buckets, error: listError } = await supabase.storage.listBuckets();
     
-    if (error) {
-      console.error('Error listing buckets:', error);
-      return;
+    if (listError) {
+      console.error('Error listing buckets:', listError);
+      throw listError;
     }
 
+    // Check and create ticket-photos bucket if needed
     const ticketPhotosBucketExists = buckets.some(bucket => bucket.name === 'ticket-photos');
-    
     if (!ticketPhotosBucketExists) {
-      // Create the bucket with public access
-      const { error: createError } = await supabase.storage.createBucket('ticket-photos', {
-        public: true,
-        fileSizeLimit: 10485760, // 10MB
-        allowedMimeTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-      });
-
-      if (createError) {
-        console.error('Error creating ticket-photos bucket:', createError);
-      } else {
-        console.log('Created ticket-photos bucket successfully');
-      }
+      await createBucket('ticket-photos', true);
+      await createBucketPolicies('ticket-photos');
     }
+
+    // Check and create device-images bucket if needed
+    const deviceImagesBucketExists = buckets.some(bucket => bucket.name === 'device-images');
+    if (!deviceImagesBucketExists) {
+      await createBucket('device-images', true);
+      await createBucketPolicies('device-images');
+    }
+
+    // Check and create device-data bucket if needed
+    const deviceDataBucketExists = buckets.some(bucket => bucket.name === 'device-data');
+    if (!deviceDataBucketExists) {
+      await createBucket('device-data', true);
+      await createBucketPolicies('device-data');
+    }
+    
+    return true;
   } catch (error) {
     console.error('Error ensuring storage buckets:', error);
+    // Don't throw - allow the app to continue even if bucket setup fails
+    return false;
   }
 }
 
-// Call this function when the app starts
+// Helper to create a storage bucket
+async function createBucket(bucketName: string, isPublic: boolean) {
+  try {
+    // Try direct bucket creation first
+    const { error } = await supabase.storage.createBucket(bucketName, {
+      public: isPublic,
+      fileSizeLimit: 10485760, // 10MB
+      allowedMimeTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/json']
+    });
+
+    if (error) {
+      console.error(`Error creating ${bucketName} bucket:`, error);
+      
+      // Try using RPC as fallback
+      try {
+        await supabase.rpc('create_storage_bucket', {
+          bucket_name: bucketName,
+          is_public: isPublic
+        });
+      } catch (rpcError) {
+        console.error(`Error creating bucket through RPC:`, rpcError);
+      }
+    }
+  } catch (error) {
+    console.error(`Error in createBucket for ${bucketName}:`, error);
+  }
+}
+
+// Helper to create policies for a bucket
+async function createBucketPolicies(bucketName: string) {
+  try {
+    // Create select policy
+    try {
+      await supabase.rpc('exec_sql', { 
+        sql: `CREATE POLICY "Public can view ${bucketName}" ON storage.objects
+              FOR SELECT USING (bucket_id = '${bucketName}');` 
+      });
+    } catch (error) {
+      console.log(`Select policy for ${bucketName} may already exist`);
+    }
+    
+    // Create insert policy
+    try {
+      await supabase.rpc('exec_sql', { 
+        sql: `CREATE POLICY "Authenticated users can upload to ${bucketName}" 
+              ON storage.objects FOR INSERT 
+              WITH CHECK (bucket_id = '${bucketName}' AND auth.role() = 'authenticated');`
+      });
+    } catch (error) {
+      console.log(`Insert policy for ${bucketName} may already exist`);
+    }
+    
+    // Create update policy
+    try {
+      await supabase.rpc('exec_sql', { 
+        sql: `CREATE POLICY "Authenticated users can update ${bucketName}" 
+              ON storage.objects FOR UPDATE 
+              USING (bucket_id = '${bucketName}' AND auth.role() = 'authenticated');`
+      });
+    } catch (error) {
+      console.log(`Update policy for ${bucketName} may already exist`);
+    }
+    
+    // Create delete policy
+    try {
+      await supabase.rpc('exec_sql', { 
+        sql: `CREATE POLICY "Authenticated users can delete from ${bucketName}" 
+              ON storage.objects FOR DELETE 
+              USING (bucket_id = '${bucketName}' AND auth.role() = 'authenticated');`
+      });
+    } catch (error) {
+      console.log(`Delete policy for ${bucketName} may already exist`);
+    }
+  } catch (error) {
+    console.error(`Error creating policies for ${bucketName}:`, error);
+  }
+}
+
+// Call the function when the app starts
 ensureStorageBuckets();

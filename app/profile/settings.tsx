@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   ScrollView,
   Alert,
   Image,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
@@ -20,62 +21,118 @@ import {
   ChevronRight,
   Shield,
   HelpCircle,
+  Languages,
+  LogOut,
 } from "lucide-react-native";
 import { useAuth } from "../../components/AuthProvider";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '../../lib/supabase';
+
+type SettingsState = {
+  notifications: boolean;
+  darkMode: boolean;
+  language: string;
+};
 
 export default function SettingsScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const [darkMode, setDarkMode] = useState(false);
-  const [notifications, setNotifications] = useState(true);
-  const [language, setLanguage] = useState("English");
-  const [biometricLogin, setBiometricLogin] = useState(false);
-  const [autoBackup, setAutoBackup] = useState(true);
+  const [settings, setSettings] = useState<SettingsState>({
+    notifications: true,
+    darkMode: false,
+    language: 'English',
+  });
+  const [loading, setLoading] = useState(true);
+  const [signingOut, setSigningOut] = useState(false);
 
-  const toggleDarkMode = () => {
-    setDarkMode(!darkMode);
-    // Here you would implement actual dark mode toggle functionality
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  const loadSettings = async () => {
+    try {
+      setLoading(true);
+      const storedSettings = await AsyncStorage.getItem('user_settings');
+      
+      if (storedSettings) {
+        setSettings(JSON.parse(storedSettings));
+      }
+    } catch (error) {
+      console.error('Error loading settings:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const toggleNotifications = () => {
-    setNotifications(!notifications);
-    // Here you would implement actual notifications toggle functionality
+  const saveSettings = async (newSettings: SettingsState) => {
+    try {
+      await AsyncStorage.setItem('user_settings', JSON.stringify(newSettings));
+      setSettings(newSettings);
+    } catch (error) {
+      console.error('Error saving settings:', error);
+      Alert.alert('Error', 'Failed to save settings');
+    }
   };
 
-  const changeLanguage = () => {
+  const handleToggle = (setting: keyof SettingsState) => {
+    if (typeof settings[setting] === 'boolean') {
+      const newSettings = {
+        ...settings,
+        [setting]: !settings[setting],
+      };
+      saveSettings(newSettings);
+    }
+  };
+
+  const handleSignOut = async () => {
     Alert.alert(
-      "Select Language",
-      "Choose your preferred language",
+      'Sign Out',
+      'Are you sure you want to sign out?',
       [
-        { text: "English", onPress: () => setLanguage("English") },
-        { text: "Spanish", onPress: () => setLanguage("Spanish") },
-        { text: "French", onPress: () => setLanguage("French") },
-        { text: "Cancel", style: "cancel" },
-      ],
-      { cancelable: true },
-    );
-  };
-
-  const resetPassword = () => {
-    Alert.alert(
-      "Reset Password",
-      "Are you sure you want to reset your password?",
-      [
-        { text: "Cancel", style: "cancel" },
         {
-          text: "Reset",
-          onPress: () => {
-            // Here you would implement password reset functionality
-            Alert.alert(
-              "Password Reset",
-              "Password reset email has been sent to your email address.",
-            );
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Sign Out',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setSigningOut(true);
+              const { error } = await supabase.auth.signOut();
+              
+              if (error) {
+                throw error;
+              }
+              
+              // Clear local settings
+              await AsyncStorage.multiRemove(['user_settings', 'user_session']);
+              
+              // Navigate to login screen
+              router.replace('/');
+            } catch (error) {
+              console.error('Error signing out:', error);
+              Alert.alert('Error', 'Failed to sign out');
+            } finally {
+              setSigningOut(false);
+            }
           },
         },
-      ],
-      { cancelable: true },
+      ]
     );
   };
+
+  if (loading) {
+    return (
+      <SafeAreaView className="flex-1 bg-white">
+        <StatusBar style="dark" />
+        <View className="flex-1 justify-center items-center">
+          <ActivityIndicator size="large" color="#3B82F6" />
+          <Text className="mt-4 text-gray-600">Loading settings...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
@@ -113,181 +170,129 @@ export default function SettingsScreen() {
       </View>
 
       <ScrollView className="flex-1">
-        {/* Appearance Section */}
-        <View className="mt-2 mb-2">
-          <Text className="text-sm font-medium text-gray-500 px-4 py-2 uppercase">
-            Appearance
-          </Text>
-          <View className="bg-white rounded-lg">
-            <View className="flex-row justify-between items-center p-4 border-b border-gray-100">
-              <View className="flex-row items-center">
-                <View className="bg-indigo-100 p-2 rounded-full">
-                  <Moon size={20} color="#4338ca" />
-                </View>
-                <Text className="text-gray-800 ml-3 font-medium">
-                  Dark Mode
-                </Text>
-              </View>
-              <Switch
-                trackColor={{ false: "#d1d5db", true: "#93c5fd" }}
-                thumbColor={darkMode ? "#3b82f6" : "#f4f4f5"}
-                onValueChange={toggleDarkMode}
-                value={darkMode}
-              />
-            </View>
-
-            <TouchableOpacity className="flex-row justify-between items-center p-4">
-              <View className="flex-row items-center">
-                <View className="bg-blue-100 p-2 rounded-full">
-                  <Globe size={20} color="#1e40af" />
-                </View>
-                <Text className="text-gray-800 ml-3 font-medium">Language</Text>
-              </View>
-              <View className="flex-row items-center">
-                <Text className="text-gray-500 mr-2">{language}</Text>
-                <ChevronRight size={18} color="#9ca3af" />
-              </View>
-            </TouchableOpacity>
-          </View>
+        {/* Preferences Section */}
+        <View className="mt-4 mb-2 px-4">
+          <Text className="text-sm font-semibold text-gray-500 uppercase">Preferences</Text>
         </View>
-
-        {/* Notifications Section */}
-        <View className="mb-2">
-          <Text className="text-sm font-medium text-gray-500 px-4 py-2 uppercase">
-            Notifications
-          </Text>
-          <View className="bg-white rounded-lg">
-            <View className="flex-row justify-between items-center p-4 border-b border-gray-100">
-              <View className="flex-row items-center">
-                <View className="bg-red-100 p-2 rounded-full">
-                  <Bell size={20} color="#b91c1c" />
-                </View>
-                <Text className="text-gray-800 ml-3 font-medium">
-                  Push Notifications
-                </Text>
-              </View>
-              <Switch
-                trackColor={{ false: "#d1d5db", true: "#93c5fd" }}
-                thumbColor={notifications ? "#3b82f6" : "#f4f4f5"}
-                onValueChange={toggleNotifications}
-                value={notifications}
-              />
+        
+        <View className="bg-white rounded-lg mx-4 shadow-sm">
+          <View className="flex-row justify-between items-center p-4 border-b border-gray-100">
+            <View className="flex-row items-center">
+              <Bell size={20} color="#6B7280" className="mr-3" />
+              <Text className="text-gray-800">Notifications</Text>
             </View>
-
-            <View className="flex-row justify-between items-center p-4">
-              <View className="flex-row items-center">
-                <View className="bg-amber-100 p-2 rounded-full">
-                  <Bell size={20} color="#b45309" />
-                </View>
-                <Text className="text-gray-800 ml-3 font-medium">
-                  Email Notifications
-                </Text>
-              </View>
-              <Switch
-                trackColor={{ false: "#d1d5db", true: "#93c5fd" }}
-                thumbColor={notifications ? "#3b82f6" : "#f4f4f5"}
-                onValueChange={toggleNotifications}
-                value={notifications}
-              />
-            </View>
+            <Switch
+              value={settings.notifications}
+              onValueChange={() => handleToggle('notifications')}
+              trackColor={{ false: '#D1D5DB', true: '#BFDBFE' }}
+              thumbColor={settings.notifications ? '#3B82F6' : '#9CA3AF'}
+            />
           </View>
+          
+          <View className="flex-row justify-between items-center p-4 border-b border-gray-100">
+            <View className="flex-row items-center">
+              <Moon size={20} color="#6B7280" className="mr-3" />
+              <Text className="text-gray-800">Dark Mode</Text>
+            </View>
+            <Switch
+              value={settings.darkMode}
+              onValueChange={() => handleToggle('darkMode')}
+              trackColor={{ false: '#D1D5DB', true: '#BFDBFE' }}
+              thumbColor={settings.darkMode ? '#3B82F6' : '#9CA3AF'}
+            />
+          </View>
+          
+          <TouchableOpacity 
+            className="flex-row justify-between items-center p-4"
+            onPress={() => Alert.alert('Language', 'Language settings not implemented yet')}
+          >
+            <View className="flex-row items-center">
+              <Languages size={20} color="#6B7280" className="mr-3" />
+              <Text className="text-gray-800">Language</Text>
+            </View>
+            <View className="flex-row items-center">
+              <Text className="text-gray-500 mr-2">{settings.language}</Text>
+              <ChevronRight size={20} color="#9CA3AF" />
+            </View>
+          </TouchableOpacity>
         </View>
-
+        
         {/* Security Section */}
-        <View className="mb-2">
-          <Text className="text-sm font-medium text-gray-500 px-4 py-2 uppercase">
-            Security
-          </Text>
-          <View className="bg-white rounded-lg">
-            <TouchableOpacity
-              className="flex-row justify-between items-center p-4 border-b border-gray-100"
-              onPress={resetPassword}
-            >
-              <View className="flex-row items-center">
-                <View className="bg-green-100 p-2 rounded-full">
-                  <Lock size={20} color="#15803d" />
-                </View>
-                <Text className="text-gray-800 ml-3 font-medium">
-                  Reset Password
-                </Text>
-              </View>
-              <ChevronRight size={18} color="#9ca3af" />
-            </TouchableOpacity>
-
-            <View className="flex-row justify-between items-center p-4 border-b border-gray-100">
-              <View className="flex-row items-center">
-                <View className="bg-purple-100 p-2 rounded-full">
-                  <Shield size={20} color="#7e22ce" />
-                </View>
-                <Text className="text-gray-800 ml-3 font-medium">
-                  Biometric Login
-                </Text>
-              </View>
-              <Switch
-                trackColor={{ false: "#d1d5db", true: "#93c5fd" }}
-                thumbColor={biometricLogin ? "#3b82f6" : "#f4f4f5"}
-                onValueChange={(value) => setBiometricLogin(value)}
-                value={biometricLogin}
-              />
-            </View>
-
-            <TouchableOpacity className="flex-row justify-between items-center p-4">
-              <View className="flex-row items-center">
-                <View className="bg-blue-100 p-2 rounded-full">
-                  <Shield size={20} color="#1e40af" />
-                </View>
-                <Text className="text-gray-800 ml-3 font-medium">
-                  Privacy Settings
-                </Text>
-              </View>
-              <ChevronRight size={18} color="#9ca3af" />
-            </TouchableOpacity>
-          </View>
+        <View className="mt-6 mb-2 px-4">
+          <Text className="text-sm font-semibold text-gray-500 uppercase">Security</Text>
         </View>
-
-        {/* Data Section */}
-        <View className="mb-2">
-          <Text className="text-sm font-medium text-gray-500 px-4 py-2 uppercase">
-            Data
-          </Text>
-          <View className="bg-white rounded-lg">
-            <View className="flex-row justify-between items-center p-4 border-b border-gray-100">
-              <View className="flex-row items-center">
-                <View className="bg-cyan-100 p-2 rounded-full">
-                  <HelpCircle size={20} color="#0e7490" />
-                </View>
-                <Text className="text-gray-800 ml-3 font-medium">
-                  Auto Backup
-                </Text>
-              </View>
-              <Switch
-                trackColor={{ false: "#d1d5db", true: "#93c5fd" }}
-                thumbColor={autoBackup ? "#3b82f6" : "#f4f4f5"}
-                onValueChange={(value) => setAutoBackup(value)}
-                value={autoBackup}
-              />
+        
+        <View className="bg-white rounded-lg mx-4 shadow-sm">
+          <TouchableOpacity 
+            className="flex-row justify-between items-center p-4 border-b border-gray-100"
+            onPress={() => Alert.alert('Password', 'Change password feature not implemented yet')}
+          >
+            <View className="flex-row items-center">
+              <Lock size={20} color="#6B7280" className="mr-3" />
+              <Text className="text-gray-800">Change Password</Text>
             </View>
-
-            <TouchableOpacity className="flex-row justify-between items-center p-4">
-              <View className="flex-row items-center">
-                <View className="bg-red-100 p-2 rounded-full">
-                  <HelpCircle size={20} color="#b91c1c" />
-                </View>
-                <Text className="text-gray-800 ml-3 font-medium">
-                  Clear Cache
-                </Text>
-              </View>
-              <ChevronRight size={18} color="#9ca3af" />
-            </TouchableOpacity>
-          </View>
+            <ChevronRight size={20} color="#9CA3AF" />
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            className="flex-row justify-between items-center p-4"
+            onPress={() => Alert.alert('Privacy', 'Privacy settings not implemented yet')}
+          >
+            <View className="flex-row items-center">
+              <Shield size={20} color="#6B7280" className="mr-3" />
+              <Text className="text-gray-800">Privacy & Security</Text>
+            </View>
+            <ChevronRight size={20} color="#9CA3AF" />
+          </TouchableOpacity>
         </View>
-
-        {/* App Info */}
-        <View className="mt-6 items-center mb-8">
-          <Text className="text-gray-500 font-medium">
-            Restaurant Tech Support
-          </Text>
-          <Text className="text-gray-400 text-sm">Version 1.0.0</Text>
+        
+        {/* Support Section */}
+        <View className="mt-6 mb-2 px-4">
+          <Text className="text-sm font-semibold text-gray-500 uppercase">Support</Text>
+        </View>
+        
+        <View className="bg-white rounded-lg mx-4 shadow-sm">
+          <TouchableOpacity 
+            className="flex-row justify-between items-center p-4 border-b border-gray-100"
+            onPress={() => Alert.alert('Help', 'Help center not implemented yet')}
+          >
+            <View className="flex-row items-center">
+              <HelpCircle size={20} color="#6B7280" className="mr-3" />
+              <Text className="text-gray-800">Help Center</Text>
+            </View>
+            <ChevronRight size={20} color="#9CA3AF" />
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            className="flex-row justify-between items-center p-4"
+            onPress={() => Alert.alert('About', 'App version: 1.0.0\nBuild: 100')}
+          >
+            <View className="flex-row items-center">
+              <Text className="text-gray-800">About</Text>
+            </View>
+            <View className="flex-row items-center">
+              <Text className="text-gray-500 mr-2">v1.0.0</Text>
+              <ChevronRight size={20} color="#9CA3AF" />
+            </View>
+          </TouchableOpacity>
+        </View>
+        
+        {/* Sign Out Button */}
+        <View className="mx-4 mt-8 mb-8">
+          <TouchableOpacity
+            className="bg-red-500 py-3 rounded-lg items-center"
+            onPress={handleSignOut}
+            disabled={signingOut}
+          >
+            {signingOut ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <View className="flex-row items-center">
+                <LogOut size={20} color="#FFFFFF" />
+                <Text className="text-white font-semibold ml-2">Sign Out</Text>
+              </View>
+            )}
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </SafeAreaView>

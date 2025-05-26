@@ -460,9 +460,8 @@ export default function EquipmentMovementForm({
       >
         <View style={{ flex: 1 }}>
           <BarcodeScanner
-            onScan={handleScan}
+            onScan={(data, type) => handleScan(data)}
             onClose={() => setShowScanner(false)}
-            mode="equipment"
           />
         </View>
       </Modal>

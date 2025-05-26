@@ -8,6 +8,7 @@ import {
   Alert,
   Image as RNImage,
   Modal,
+  TextInput,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
@@ -25,6 +26,8 @@ import {
   Image as ImageIcon,
   FileText,
   X,
+  History,
+  Send,
 } from "lucide-react-native";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../components/AuthProvider";
@@ -32,6 +35,8 @@ import TicketStatusWorkflow from "../../components/TicketStatusWorkflow";
 import TicketAssignment from "../../components/TicketAssignment";
 import { useOffline } from "../../components/OfflineManager";
 import { Image } from "expo-image";
+import ImageGallery from "../../components/ImageGallery";
+import * as Haptics from "expo-haptics";
 
 export default function TicketDetailScreen() {
   const { id } = useLocalSearchParams();
@@ -43,10 +48,21 @@ export default function TicketDetailScreen() {
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [isAssignee, setIsAssignee] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [ticketHistory, setTicketHistory] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [ticketComments, setTicketComments] = useState<any[]>([]);
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [newComment, setNewComment] = useState("");
+  const [sendingComment, setSendingComment] = useState(false);
+  const [selectedImageIndex, setSelectedImageIndex] = useState<number>(0);
+  const [showGallery, setShowGallery] = useState<boolean>(false);
 
   useEffect(() => {
     if (id) {
       fetchTicketDetails();
+      fetchTicketHistory();
+      fetchTicketComments();
     }
   }, [id]);
 
@@ -75,6 +91,50 @@ export default function TicketDetailScreen() {
       Alert.alert("Error", "Failed to load ticket details");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchTicketHistory = async () => {
+    try {
+      setLoadingHistory(true);
+      const { data, error } = await supabase
+        .from("ticket_history")
+        .select("*, users:user_id(name, email)")
+        .eq("ticket_id", id)
+        .order("timestamp", { ascending: false });
+
+      if (error) throw error;
+
+      if (data) {
+        setTicketHistory(data);
+      }
+    } catch (error) {
+      console.error("Error fetching ticket history:", error);
+      // Don't show alert for history loading failure
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const fetchTicketComments = async () => {
+    try {
+      setLoadingComments(true);
+      const { data, error } = await supabase
+        .from("ticket_comments")
+        .select("*, users:user_id(name, email)")
+        .eq("ticket_id", id)
+        .order("created_at", { ascending: true });
+
+      if (error) throw error;
+
+      if (data) {
+        setTicketComments(data);
+      }
+    } catch (error) {
+      console.error("Error fetching ticket comments:", error);
+      // Don't show alert for comments loading failure
+    } finally {
+      setLoadingComments(false);
     }
   };
 
@@ -171,6 +231,178 @@ export default function TicketDetailScreen() {
     if (!dateString) return "Not set";
     const date = new Date(dateString);
     return date.toLocaleString();
+  };
+
+  const renderTicketHistory = () => {
+    if (loadingHistory) {
+      return (
+        <View className="py-4 items-center">
+          <ActivityIndicator size="small" color="#1e40af" />
+          <Text className="text-gray-500 mt-2">Loading history...</Text>
+        </View>
+      );
+    }
+
+    if (ticketHistory.length === 0) {
+      return (
+        <View className="py-4 items-center">
+          <Text className="text-gray-500">No history available</Text>
+        </View>
+      );
+    }
+
+    return ticketHistory.map((item, index) => (
+      <View 
+        key={item.id} 
+        className={`p-3 ${index < ticketHistory.length - 1 ? 'border-b border-gray-100' : ''}`}
+      >
+        <View className="flex-row justify-between items-start">
+          <View className="flex-row items-center">
+            <View className={`w-2 h-2 rounded-full ${getStatusColor(item.status)} mr-2`} />
+            <Text className="font-medium">{getStatusLabel(item.status)}</Text>
+          </View>
+          <Text className="text-xs text-gray-500">{formatDate(item.timestamp)}</Text>
+        </View>
+        {item.notes && (
+          <Text className="text-gray-700 mt-1">{item.notes}</Text>
+        )}
+        {item.users && (
+          <Text className="text-xs text-gray-500 mt-1">
+            By {item.users.name || item.users.email || 'Unknown user'}
+          </Text>
+        )}
+      </View>
+    ));
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "new":
+        return "bg-blue-500";
+      case "assigned":
+        return "bg-purple-500";
+      case "in-progress":
+        return "bg-yellow-500";
+      case "resolved":
+        return "bg-green-500";
+      default:
+        return "bg-gray-500";
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case "new":
+        return "Created";
+      case "assigned":
+        return "Assigned";
+      case "in-progress":
+        return "In Progress";
+      case "resolved":
+        return "Resolved";
+      default:
+        return status.charAt(0).toUpperCase() + status.slice(1);
+    }
+  };
+
+  const handleAddComment = async () => {
+    if (!newComment.trim() || !user) return;
+
+    try {
+      setSendingComment(true);
+      const now = new Date().toISOString();
+      
+      const { data, error } = await supabase
+        .from("ticket_comments")
+        .insert({
+          ticket_id: id,
+          user_id: user.id,
+          comment: newComment.trim(),
+          created_at: now,
+        })
+        .select();
+
+      if (error) throw error;
+
+      if (data) {
+        // Add the new comment to the list
+        const newCommentWithUser = {
+          ...data[0],
+          users: {
+            name: user.email,
+            email: user.email
+          }
+        };
+        
+        setTicketComments([...ticketComments, newCommentWithUser]);
+        setNewComment("");
+        
+        // Create notification for assignee if the comment is not from them
+        if (ticket.assignee_id && ticket.assignee_id !== user.id) {
+          await supabase.from("notifications").insert([
+            {
+              user_id: ticket.assignee_id,
+              title: "New Comment on Ticket",
+              message: `New comment on ticket #${id.slice(0, 8)}: "${newComment.slice(0, 50)}${newComment.length > 50 ? '...' : ''}"`,
+              type: "info",
+              related_id: id,
+              related_type: "ticket",
+              is_read: false,
+              created_at: now,
+            },
+          ]);
+        }
+      }
+    } catch (error) {
+      console.error("Error adding comment:", error);
+      Alert.alert("Error", "Failed to add comment");
+    } finally {
+      setSendingComment(false);
+    }
+  };
+
+  const renderTicketComments = () => {
+    if (loadingComments) {
+      return (
+        <View className="py-4 items-center">
+          <ActivityIndicator size="small" color="#1e40af" />
+          <Text className="text-gray-500 mt-2">Loading comments...</Text>
+        </View>
+      );
+    }
+
+    if (ticketComments.length === 0) {
+      return (
+        <View className="py-4 items-center">
+          <Text className="text-gray-500">No comments yet</Text>
+        </View>
+      );
+    }
+
+    return (
+      <View>
+        {ticketComments.map((comment) => (
+          <View 
+            key={comment.id} 
+            className={`p-4 mb-3 rounded-lg ${
+              comment.user_id === user?.id 
+                ? "bg-blue-50 ml-10" 
+                : "bg-gray-50 mr-10"
+            }`}
+          >
+            <View className="flex-row justify-between items-start">
+              <Text className="font-medium">
+                {comment.users?.name || comment.users?.email || "Unknown user"}
+              </Text>
+              <Text className="text-xs text-gray-500">
+                {formatDate(comment.created_at)}
+              </Text>
+            </View>
+            <Text className="mt-2">{comment.comment}</Text>
+          </View>
+        ))}
+      </View>
+    );
   };
 
   if (loading) {
@@ -420,7 +652,11 @@ export default function TicketDetailScreen() {
                 <TouchableOpacity
                   key={index}
                   className="mr-3"
-                  onPress={() => setSelectedImage(photo)}
+                  onPress={() => {
+                    setSelectedImageIndex(index);
+                    setShowGallery(true);
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  }}
                 >
                   <Image
                     source={{ uri: photo }}
@@ -451,7 +687,71 @@ export default function TicketDetailScreen() {
             </View>
           </View>
         )}
+
+        {/* Comments Section */}
+        <View className="mt-4 bg-white rounded-lg">
+          <View className="flex-row items-center p-3 bg-gray-50 rounded-t-lg">
+            <MessageSquare size={18} color="#1e40af" />
+            <Text className="ml-2 text-gray-800 font-bold">Comments</Text>
+          </View>
+          
+          <View className="p-3 bg-white rounded-b-lg">
+            {renderTicketComments()}
+            
+            <View className="flex-row items-center mt-4 border border-gray-200 rounded-lg">
+              <TextInput
+                className="flex-1 p-3"
+                placeholder="Add a comment..."
+                value={newComment}
+                onChangeText={setNewComment}
+                multiline
+                style={{ maxHeight: 100 }}
+              />
+              <TouchableOpacity
+                className={`p-3 ${newComment.trim() ? "opacity-100" : "opacity-50"}`}
+                onPress={handleAddComment}
+                disabled={!newComment.trim() || sendingComment}
+              >
+                {sendingComment ? (
+                  <ActivityIndicator size="small" color="#1e40af" />
+                ) : (
+                  <Send size={20} color="#1e40af" />
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+
+        {/* Ticket History Section */}
+        <View className="mt-4 bg-white rounded-lg">
+          <TouchableOpacity 
+            className="flex-row justify-between items-center p-3 bg-gray-50 rounded-lg"
+            onPress={() => setShowHistory(!showHistory)}
+          >
+            <View className="flex-row items-center">
+              <History size={18} color="#1e40af" />
+              <Text className="ml-2 text-gray-800 font-bold">Ticket History</Text>
+            </View>
+            <Text className="text-blue-600">{showHistory ? 'Hide' : 'Show'}</Text>
+          </TouchableOpacity>
+          
+          {showHistory && (
+            <View className="bg-white rounded-lg mt-2 border border-gray-100">
+              {renderTicketHistory()}
+            </View>
+          )}
+        </View>
       </ScrollView>
+
+      {/* Replace old image preview modal with ImageGallery */}
+      {ticket.photos && ticket.photos.length > 0 && (
+        <ImageGallery
+          images={ticket.photos}
+          visible={showGallery}
+          initialIndex={selectedImageIndex}
+          onClose={() => setShowGallery(false)}
+        />
+      )}
 
       {/* Assignment Modal */}
       <Modal
@@ -465,30 +765,6 @@ export default function TicketDetailScreen() {
           onAssign={handleAssign}
           onClose={() => setShowAssignModal(false)}
         />
-      </Modal>
-
-      {/* Image Preview Modal */}
-      <Modal
-        animationType="fade"
-        transparent={true}
-        visible={!!selectedImage}
-        onRequestClose={() => setSelectedImage(null)}
-      >
-        <View className="flex-1 bg-black/80 justify-center items-center">
-          <TouchableOpacity
-            className="absolute top-10 right-6 z-10 bg-black/50 rounded-full p-2"
-            onPress={() => setSelectedImage(null)}
-          >
-            <X size={24} color="#ffffff" />
-          </TouchableOpacity>
-          {selectedImage && (
-            <Image
-              source={{ uri: selectedImage }}
-              style={{ width: '90%', height: '70%' }}
-              contentFit="contain"
-            />
-          )}
-        </View>
       </Modal>
     </SafeAreaView>
   );

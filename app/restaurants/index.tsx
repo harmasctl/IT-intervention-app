@@ -9,6 +9,8 @@ import {
   Alert,
   Modal,
   ScrollView,
+  Image,
+  RefreshControl,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
@@ -26,9 +28,13 @@ import {
   CircleCheck,
   AlertCircle,
   Hammer,
+  Clock,
+  MoreVertical,
+  Filter,
+  ArrowRight,
+  Map,
 } from "lucide-react-native";
 import { supabase } from "../../lib/supabase";
-import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { decode } from "base64-arraybuffer";
 
@@ -42,15 +48,19 @@ type Restaurant = {
   manager_name?: string;
   status?: 'active' | 'closed' | 'renovation';
   created_at: string;
+  image_url?: string;
+  operating_hours?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
 };
 
 export default function RestaurantsScreen() {
   const router = useRouter();
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
-  const [filteredRestaurants, setFilteredRestaurants] = useState<Restaurant[]>(
-    [],
-  );
+  const [filteredRestaurants, setFilteredRestaurants] = useState<Restaurant[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [newRestaurant, setNewRestaurant] = useState({
@@ -61,9 +71,16 @@ export default function RestaurantsScreen() {
     email: "",
     manager_name: "",
     status: "active" as Restaurant["status"],
+    city: "",
+    state: "",
+    zip: ""
   });
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [filters, setFilters] = useState({
+    city: '',
+    state: '',
+  });
 
   useEffect(() => {
     fetchRestaurants();
@@ -87,46 +104,71 @@ export default function RestaurantsScreen() {
   }, []);
 
   useEffect(() => {
-    filterRestaurants();
-  }, [searchQuery, restaurants]);
+    applyFilters();
+  }, [searchQuery, filters, restaurants]);
 
   const fetchRestaurants = async () => {
     try {
       setLoading(true);
+      
       const { data, error } = await supabase
-        .from("restaurants")
-        .select("*")
-        .order("name");
-
-      if (error) throw error;
-
-      if (data) {
-        setRestaurants(data);
+        .from('restaurants')
+        .select('*')
+        .order('name');
+      
+      if (error) {
+        console.error('Error fetching restaurants:', error);
+        Alert.alert('Error', 'Failed to load restaurants');
+        return;
       }
+      
+      setRestaurants(data || []);
     } catch (error) {
-      console.error("Error fetching restaurants:", error);
-      Alert.alert("Error", "Failed to load restaurants");
+      console.error('Error in fetchRestaurants:', error);
+      Alert.alert('Error', 'An unexpected error occurred');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  const filterRestaurants = () => {
-    if (!searchQuery) {
-      setFilteredRestaurants(restaurants);
-      return;
+  const applyFilters = () => {
+    let filtered = [...restaurants];
+    
+    // Apply search query filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(
+        restaurant =>
+          restaurant.name.toLowerCase().includes(query) ||
+          restaurant.location?.toLowerCase().includes(query) ||
+          restaurant.address?.toLowerCase().includes(query) ||
+          restaurant.manager_name?.toLowerCase().includes(query) ||
+          restaurant.city?.toLowerCase().includes(query) ||
+          restaurant.email?.toLowerCase().includes(query)
+      );
     }
-
-    const query = searchQuery.toLowerCase();
-    const filtered = restaurants.filter(
-      (restaurant) =>
-        restaurant.name.toLowerCase().includes(query) ||
-        restaurant.location?.toLowerCase().includes(query) ||
-        restaurant.address?.toLowerCase().includes(query) ||
-        restaurant.manager_name?.toLowerCase().includes(query),
-    );
-
+    
+    // Apply city filter
+    if (filters.city) {
+      filtered = filtered.filter(
+        restaurant => restaurant.city?.toLowerCase().includes(filters.city.toLowerCase())
+      );
+    }
+    
+    // Apply state filter
+    if (filters.state) {
+      filtered = filtered.filter(
+        restaurant => restaurant.state?.toLowerCase().includes(filters.state.toLowerCase())
+      );
+    }
+    
     setFilteredRestaurants(filtered);
+  };
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    fetchRestaurants();
   };
 
   const pickImage = async () => {
@@ -227,6 +269,9 @@ export default function RestaurantsScreen() {
             email: newRestaurant.email || null,
             manager_name: newRestaurant.manager_name || null,
             status: newRestaurant.status || 'active',
+            city: newRestaurant.city || null,
+            state: newRestaurant.state || null,
+            zip: newRestaurant.zip || null,
           },
         ])
         .select();
@@ -259,6 +304,9 @@ export default function RestaurantsScreen() {
         email: "",
         manager_name: "",
         status: "active",
+        city: "",
+        state: "",
+        zip: ""
       });
       setImageUri(null);
       fetchRestaurants();
@@ -269,7 +317,10 @@ export default function RestaurantsScreen() {
   };
 
   const handleRestaurantPress = (restaurant: Restaurant) => {
-    router.push(`/restaurants/${restaurant.id}`);
+    router.push({
+      pathname: '/restaurants/[id]',
+      params: { id: restaurant.id }
+    });
   };
 
   const getStatusIcon = (status?: string) => {
@@ -296,6 +347,17 @@ export default function RestaurantsScreen() {
       default:
         return "Active";
     }
+  };
+
+  const showFilterOptions = () => {
+    // In a real app, you would show a modal with filter options
+    Alert.alert(
+      'Filters',
+      'Filter options would be shown here',
+      [
+        { text: 'OK', onPress: () => {} }
+      ]
+    );
   };
 
   const renderRestaurantItem = ({ item }: { item: Restaurant }) => (
@@ -361,30 +423,62 @@ export default function RestaurantsScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
-      <StatusBar style="auto" />
+      <StatusBar style="dark" />
 
       {/* Header */}
-      <View className="flex-row justify-between items-center px-5 py-4 bg-gradient-to-r from-blue-700 to-blue-900 shadow-lg">
-        <Text className="text-2xl font-bold text-white">Restaurants</Text>
-        <TouchableOpacity
-          className="bg-green-600 p-2 rounded-full"
-          onPress={() => setShowAddModal(true)}
-        >
-          <Plus size={22} color="white" />
-        </TouchableOpacity>
-      </View>
-
-      {/* Search */}
-      <View className="p-4 bg-white shadow-sm">
-        <View className="flex-row items-center bg-gray-100 rounded-xl px-4 py-3">
-          <Search size={20} color="#4b5563" />
-          <TextInput
-            className="flex-1 ml-3 py-1 text-base"
-            placeholder="Search restaurants..."
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholderTextColor="#9ca3af"
-          />
+      <View className="bg-white p-4 border-b border-gray-200">
+        <View className="flex-row justify-between items-center">
+          <View className="flex-row items-center">
+            <Building2 size={24} color="#0F172A" />
+            <Text className="text-xl font-bold ml-2 text-gray-800">Restaurants</Text>
+          </View>
+          
+          <View className="flex-row">
+            <TouchableOpacity 
+              className="mr-3 bg-blue-500 p-2 rounded-full"
+              onPress={() => {
+                console.log("Navigating to device map");
+                router.push("/restaurants/device-map");
+              }}
+            >
+              <Map size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+            <TouchableOpacity 
+              className="mr-3 bg-green-500 p-2 rounded-full"
+              onPress={() => {
+                console.log("Navigating to simple map");
+                router.push("/restaurants/simple-map");
+              }}
+            >
+              <Map size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+            <TouchableOpacity 
+              className="bg-blue-500 p-2 rounded-full"
+              onPress={() => setShowAddModal(true)}
+            >
+              <Plus size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+        </View>
+        
+        {/* Search Bar */}
+        <View className="flex-row mt-4">
+          <View className="flex-1 flex-row items-center bg-gray-100 rounded-lg px-3 py-2">
+            <Search size={20} color="#6B7280" />
+            <TextInput
+              className="flex-1 ml-2 text-gray-800"
+              placeholder="Search restaurants..."
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+          </View>
+          
+          <TouchableOpacity
+            className="ml-2 bg-gray-100 p-2 rounded-lg items-center justify-center"
+            onPress={showFilterOptions}
+          >
+            <Filter size={20} color="#6B7280" />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -400,6 +494,9 @@ export default function RestaurantsScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ padding: 16 }}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+          }
         />
       ) : (
         <View className="flex-1 justify-center items-center p-4">
@@ -440,7 +537,7 @@ export default function RestaurantsScreen() {
                   <Image
                     source={{ uri: imageUri }}
                     className="w-full h-full rounded-xl"
-                    contentFit="cover"
+                    resizeMode="cover"
                   />
                 ) : (
                   <View className="items-center">

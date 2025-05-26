@@ -1,11 +1,13 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
-import { Home, User, Bell, Plus } from 'lucide-react-native';
+import { Home, User, Bell, Plus, Wrench } from 'lucide-react-native';
 import { useAuth } from '../components/AuthProvider';
 import RestaurantList from '../components/RestaurantList';
 import DeviceList from '../components/DeviceList';
+import MaintenanceNotifications from '../components/MaintenanceNotifications';
+import WebMaintenanceNotifications from '../components/WebMaintenanceNotifications';
 
 export default function DashboardScreen() {
   const { user } = useAuth();
@@ -14,6 +16,15 @@ export default function DashboardScreen() {
   const handleCreateTicket = () => {
     router.push('/tickets/create');
   };
+
+  const handleViewAllMaintenance = () => {
+    router.push('/schedule/maintenance');
+  };
+
+  // Use the appropriate maintenance component based on platform
+  const MaintenanceComponent = Platform.OS === 'web' 
+    ? WebMaintenanceNotifications 
+    : MaintenanceNotifications;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -58,6 +69,24 @@ export default function DashboardScreen() {
           <Text style={styles.subtitle}>
             IT Support Dashboard
           </Text>
+        </View>
+
+        {/* Maintenance Alerts Section */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionTitleContainer}>
+              <Wrench size={18} color="#1e40af" />
+              <Text style={styles.sectionTitle}>Maintenance Alerts</Text>
+            </View>
+            <TouchableOpacity onPress={handleViewAllMaintenance}>
+              <Text style={styles.viewAllText}>View All</Text>
+            </TouchableOpacity>
+          </View>
+          <MaintenanceComponent 
+            limit={3} 
+            showHeader={false} 
+            onViewAllPress={handleViewAllMaintenance} 
+          />
         </View>
 
         <View style={styles.section}>
@@ -158,5 +187,25 @@ const styles = StyleSheet.create({
   },
   section: {
     marginBottom: 24,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  sectionTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#111827',
+    marginLeft: 6,
+  },
+  viewAllText: {
+    color: '#2563eb',
+    fontWeight: '500',
   },
 }); 
