@@ -34,6 +34,7 @@ import {
   Download,
   ArrowLeft,
   RefreshCw,
+  ArrowRightLeft,
 } from "lucide-react-native";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../components/AuthProvider";
@@ -690,6 +691,13 @@ export default function DevicesScreen() {
             >
               <QrCode size={16} color="#6B7280" />
               <Text className="text-gray-700 text-sm ml-2">QR Codes</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              className="bg-white border border-gray-200 rounded-lg px-3 py-2 flex-row items-center"
+              onPress={() => router.navigate("/devices/transfers")}
+            >
+              <ArrowRightLeft size={16} color="#6B7280" />
+              <Text className="text-gray-700 text-sm ml-2">Transfers</Text>
             </TouchableOpacity>
             </View>
           <View className="flex-row space-x-1">

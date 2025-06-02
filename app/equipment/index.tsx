@@ -81,19 +81,12 @@ export default function EquipmentInventoryScreen() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [filteredEquipment, setFilteredEquipment] = useState<EquipmentItem[]>([]);
   const [showFilters, setShowFilters] = useState(false);
-
-  const equipmentTypes = [
-    "All",
-    "Spare Parts",
-    "Tools",
-    "Cleaning Supplies",
-    "Electronics",
-    "Other",
-  ];
+  const [equipmentTypes, setEquipmentTypes] = useState<string[]>(["All"]);
 
   useEffect(() => {
     fetchEquipment();
     fetchWarehouses();
+    fetchEquipmentTypes();
 
     // Set up real-time subscription for equipment changes
     const equipmentSubscription = supabase
@@ -131,6 +124,23 @@ export default function EquipmentInventoryScreen() {
       }
     } catch (error) {
       console.error("Error fetching warehouses:", error);
+    }
+  };
+
+  const fetchEquipmentTypes = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("equipment_types")
+        .select("name")
+        .order("name");
+
+      if (error) throw error;
+
+      if (data) {
+        setEquipmentTypes(["All", ...data.map(t => t.name)]);
+      }
+    } catch (error) {
+      console.error("Error fetching equipment types:", error);
     }
   };
 
@@ -429,7 +439,7 @@ export default function EquipmentInventoryScreen() {
   const renderEquipmentItem = ({ item }: { item: EquipmentItem }) => (
     <TouchableOpacity
       className="bg-white rounded-xl p-4 mb-4 shadow-sm"
-      onPress={() => handleEquipmentPress(item.id)}
+      onPress={() => router.push(`/equipment/details/${item.id}`)}
     >
       <View className="flex-row">
         {/* Item Image or Icon */}
@@ -543,11 +553,11 @@ export default function EquipmentInventoryScreen() {
         {showFilters && (
           <View className="bg-white rounded-xl mt-4 p-4">
             <Text className="font-medium text-gray-700 mb-2">Filters</Text>
-            
+
             {/* Type Filter */}
             <Text className="text-sm text-gray-500 mb-2">Equipment Type</Text>
-            <ScrollView 
-              horizontal 
+            <ScrollView
+              horizontal
               showsHorizontalScrollIndicator={false}
               className="mb-4"
             >
@@ -576,8 +586,8 @@ export default function EquipmentInventoryScreen() {
 
             {/* Warehouse Filter */}
             <Text className="text-sm text-gray-500 mb-2">Warehouse Location</Text>
-            <ScrollView 
-              horizontal 
+            <ScrollView
+              horizontal
               showsHorizontalScrollIndicator={false}
               className="mb-4"
             >
@@ -661,7 +671,7 @@ export default function EquipmentInventoryScreen() {
                   />
                 )}
               </TouchableOpacity>
-              
+
               <TouchableOpacity
                 className={`flex-row items-center px-4 py-2 mr-2 rounded-lg ${
                   sortBy === "stock_level" ? "bg-blue-100 border border-blue-500" : "bg-gray-100"
@@ -684,7 +694,7 @@ export default function EquipmentInventoryScreen() {
                   />
                 )}
               </TouchableOpacity>
-              
+
               <TouchableOpacity
                 className={`flex-row items-center px-4 py-2 rounded-lg ${
                   sortBy === "cost" ? "bg-blue-100 border border-blue-500" : "bg-gray-100"
@@ -715,22 +725,41 @@ export default function EquipmentInventoryScreen() {
       {/* Equipment Tabs */}
       <EquipmentTabs activeTab="inventory" />
 
-      {/* Action Buttons */}
-      <View className="flex-row px-4 py-3 bg-white">
-        <TouchableOpacity
-          className="flex-1 flex-row items-center justify-center bg-blue-600 p-3 rounded-xl mr-2"
-          onPress={() => handleScanBarcode("equipment")}
-        >
-          <Barcode size={20} color="white" />
-          <Text className="text-white font-medium ml-2">Scan Equipment</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          className="flex-1 flex-row items-center justify-center bg-amber-600 p-3 rounded-xl ml-2"
-          onPress={() => handleScanBarcode("stock")}
-        >
-          <ArrowUp size={20} color="white" />
-          <Text className="text-white font-medium ml-2">Stock Movement</Text>
-        </TouchableOpacity>
+      {/* Enhanced Action Buttons */}
+      <View className="px-4 py-3 bg-white">
+        <View className="flex-row mb-3">
+          <TouchableOpacity
+            className="flex-1 flex-row items-center justify-center bg-blue-600 p-3 rounded-xl mr-2"
+            onPress={() => router.push("/equipment/scan")}
+          >
+            <Barcode size={20} color="white" />
+            <Text className="text-white font-medium ml-2">Scan Equipment</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            className="flex-1 flex-row items-center justify-center bg-amber-600 p-3 rounded-xl ml-2"
+            onPress={() => router.push("/equipment/movement")}
+          >
+            <ArrowUp size={20} color="white" />
+            <Text className="text-white font-medium ml-2">Stock Movement</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View className="flex-row">
+          <TouchableOpacity
+            className="flex-1 flex-row items-center justify-center bg-green-600 p-3 rounded-xl mr-2"
+            onPress={() => router.push("/equipment/bulk-movement")}
+          >
+            <Package size={20} color="white" />
+            <Text className="text-white font-medium ml-2">Bulk Movement</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            className="flex-1 flex-row items-center justify-center bg-purple-600 p-3 rounded-xl ml-2"
+            onPress={() => router.push("/equipment/reports")}
+          >
+            <Info size={20} color="white" />
+            <Text className="text-white font-medium ml-2">Reports</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Equipment List */}

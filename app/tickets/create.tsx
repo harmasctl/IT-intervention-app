@@ -59,25 +59,9 @@ export default function CreateTicketScreen() {
         throw new Error("Please select both a device and restaurant");
       }
 
-      // Calculate SLA due date based on priority
-      const now = new Date();
-      let slaDueDate = new Date();
 
-      // Set SLA due time based on priority
-      switch (ticketData.priority) {
-        case 'critical':
-          slaDueDate.setHours(now.getHours() + 1); // 1 hour for critical priority
-          break;
-        case 'high':
-          slaDueDate.setHours(now.getHours() + 4); // 4 hours for high priority
-          break;
-        case 'medium':
-          slaDueDate.setHours(now.getHours() + 24); // 24 hours for medium priority
-          break;
-        case 'low':
-          slaDueDate.setDate(now.getDate() + 3); // 3 days for low priority
-          break;
-      }
+
+
 
       // Create ticket insert object
       const ticketInsert: TicketInsert = {
@@ -87,10 +71,10 @@ export default function CreateTicketScreen() {
         device_id: ticketData.device.id,
         diagnostic_info: ticketData.diagnosticInfo || "",
         photos: ticketData.photos || [],
-        status: "new",
+        status: "open",
         created_at: new Date().toISOString(),
         created_by: user?.id || null,
-        sla_due_at: slaDueDate.toISOString(),
+
       };
 
       // Insert ticket into Supabase

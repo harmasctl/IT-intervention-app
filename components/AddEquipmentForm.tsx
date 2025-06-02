@@ -9,8 +9,11 @@ import {
   Modal,
 } from "react-native";
 import { ArrowLeft, Camera, X } from "lucide-react-native";
+import { useRouter } from "expo-router";
 import { supabase } from "../lib/supabase";
 import BarcodeScanner from "../components/BarcodeScanner";
+import QuickAddTypeModal from "../components/QuickAddTypeModal";
+import QuickAddSupplierModal from "../components/QuickAddSupplierModal";
 
 type AddEquipmentFormProps = {
   onCancel: () => void;
@@ -21,8 +24,11 @@ export default function AddEquipmentForm({
   onCancel,
   onSuccess,
 }: AddEquipmentFormProps) {
+  const router = useRouter();
   const [name, setName] = useState("");
-  const [type, setType] = useState("Spare Parts");
+  const [type, setType] = useState("");
+  const [typeOptions, setTypeOptions] = useState<{ id: string; name: string }[]>([]);
+  const [showTypeDropdown, setShowTypeDropdown] = useState(false);
   const [stockLevel, setStockLevel] = useState("0");
   const [supplier, setSupplier] = useState("");
   const [supplierOptions, setSupplierOptions] = useState<
@@ -30,21 +36,19 @@ export default function AddEquipmentForm({
   >([]);
   const [showSupplierDropdown, setShowSupplierDropdown] = useState(false);
   const [warehouseLocation, setWarehouseLocation] = useState("");
+  const [warehouseOptions, setWarehouseOptions] = useState<{ id: string; name: string }[]>([]);
+  const [showWarehouseDropdown, setShowWarehouseDropdown] = useState(false);
   const [notes, setNotes] = useState("");
+  const [minStockLevel, setMinStockLevel] = useState("");
+  const [maxStockLevel, setMaxStockLevel] = useState("");
+  const [cost, setCost] = useState("");
   const [loading, setLoading] = useState(false);
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
   const [barcodeId, setBarcodeId] = useState("");
+  const [showQuickAddType, setShowQuickAddType] = useState(false);
+  const [showQuickAddSupplier, setShowQuickAddSupplier] = useState(false);
 
-  const equipmentTypes = [
-    "Spare Parts",
-    "Tools",
-    "Cleaning Supplies",
-    "Electronics",
-    "Kitchen Equipment",
-    "Office Supplies",
-    "Safety Equipment",
-    "Other",
-  ];
+
 
   useEffect(() => {
     // Fetch suppliers for dropdown
@@ -65,17 +69,70 @@ export default function AddEquipmentForm({
       }
     };
 
+    // Fetch equipment types
+    const fetchTypes = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("equipment_types")
+          .select("id, name")
+          .order("name");
+
+        if (error) throw error;
+
+        if (data) {
+          setTypeOptions(data);
+        }
+      } catch (error) {
+        console.error("Error fetching equipment types:", error);
+      }
+    };
+
+    // Fetch warehouses
+    const fetchWarehouses = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("warehouses")
+          .select("id, name")
+          .order("name");
+
+        if (error) throw error;
+
+        if (data) {
+          setWarehouseOptions(data);
+        }
+      } catch (error) {
+        console.error("Error fetching warehouses:", error);
+      }
+    };
+
     fetchSuppliers();
+    fetchTypes();
+    fetchWarehouses();
   }, []);
 
+  const handleTypeAdded = (typeName: string) => {
+    setType(typeName);
+    fetchTypes(); // Refresh the types list
+  };
+
+  const handleSupplierAdded = (supplierName: string) => {
+    setSupplier(supplierName);
+    fetchSuppliers(); // Refresh the suppliers list
+  };
+
   const handleSubmit = async () => {
-    if (!name) {
+    if (!name.trim()) {
       Alert.alert("Error", "Please enter equipment name");
       return;
     }
 
-    if (isNaN(parseInt(stockLevel))) {
-      Alert.alert("Error", "Stock level must be a number");
+    if (!type) {
+      Alert.alert("Error", "Please select equipment type");
+      return;
+    }
+
+    if (isNaN(parseInt(stockLevel)) || parseInt(stockLevel) < 0) {
+      Alert.alert("Error", "Stock level must be a valid number");
       return;
     }
 
@@ -88,11 +145,15 @@ export default function AddEquipmentForm({
         stock_level: parseInt(stockLevel),
         supplier: supplier || null,
         warehouse_location: warehouseLocation || null,
-        notes: notes || null,
+        description: notes || null,
+        min_stock_level: minStockLevel ? parseInt(minStockLevel) : Math.max(1, Math.floor(parseInt(stockLevel) * 0.2)),
+        max_stock_level: maxStockLevel ? parseInt(maxStockLevel) : parseInt(stockLevel) * 2,
+        cost: cost ? parseFloat(cost) : 0,
+        sku: barcodeId || `SKU-${Date.now()}`, // Use scanned barcode or generate SKU
       };
 
       const { data, error } = await supabase
-        .from("equipment")
+        .from("equipment_inventory")
         .insert([newEquipment])
         .select();
 
@@ -142,25 +203,47 @@ export default function AddEquipmentForm({
 
           <View className="mb-4">
             <Text className="text-gray-700 mb-1 font-medium">Type *</Text>
-            <View className="border border-gray-300 rounded-lg overflow-hidden">
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <View className="flex-row p-1">
-                  {equipmentTypes.map((equipType) => (
+            <TouchableOpacity
+              onPress={() => setShowTypeDropdown(!showTypeDropdown)}
+              className="border border-gray-300 rounded-lg px-3 py-2 flex-row justify-between items-center"
+            >
+              <Text className={type ? "text-gray-800" : "text-gray-400"}>
+                {type || "Select equipment type"}
+              </Text>
+              <Text className="text-gray-500">
+                {showTypeDropdown ? "▲" : "▼"}
+              </Text>
+            </TouchableOpacity>
+
+            {showTypeDropdown && (
+              <View className="border border-gray-300 rounded-lg mt-1 max-h-40 bg-white z-10">
+                <ScrollView>
+                  {typeOptions.map((item) => (
                     <TouchableOpacity
-                      key={equipType}
-                      className={`px-3 py-2 rounded-lg mr-2 ${type === equipType ? "bg-blue-500" : "bg-gray-100"}`}
-                      onPress={() => setType(equipType)}
+                      key={item.id}
+                      className="px-3 py-2 border-b border-gray-100"
+                      onPress={() => {
+                        setType(item.name);
+                        setShowTypeDropdown(false);
+                      }}
                     >
-                      <Text
-                        className={`${type === equipType ? "text-white" : "text-gray-700"}`}
-                      >
-                        {equipType}
-                      </Text>
+                      <Text className="text-gray-800">{item.name}</Text>
                     </TouchableOpacity>
                   ))}
-                </View>
-              </ScrollView>
-            </View>
+                  <TouchableOpacity
+                    className="px-3 py-2 bg-blue-50"
+                    onPress={() => {
+                      setShowTypeDropdown(false);
+                      setShowQuickAddType(true);
+                    }}
+                  >
+                    <Text className="text-blue-600 font-medium">
+                      + Add New Type
+                    </Text>
+                  </TouchableOpacity>
+                </ScrollView>
+              </View>
+            )}
           </View>
 
           <View className="mb-4">
@@ -173,6 +256,17 @@ export default function AddEquipmentForm({
               value={stockLevel}
               onChangeText={setStockLevel}
               keyboardType="numeric"
+            />
+          </View>
+
+          <View className="mb-4">
+            <Text className="text-gray-700 mb-1 font-medium">Cost per Unit</Text>
+            <TextInput
+              className="border border-gray-300 rounded-lg px-3 py-2"
+              placeholder="Enter cost per unit"
+              value={cost}
+              onChangeText={setCost}
+              keyboardType="decimal-pad"
             />
           </View>
 
@@ -208,12 +302,8 @@ export default function AddEquipmentForm({
                   <TouchableOpacity
                     className="px-3 py-2 bg-blue-50"
                     onPress={() => {
-                      // In a real app, this would navigate to add supplier screen
-                      Alert.alert(
-                        "Add Supplier",
-                        "Navigate to add supplier screen",
-                      );
                       setShowSupplierDropdown(false);
+                      setShowQuickAddSupplier(true);
                     }}
                   >
                     <Text className="text-blue-600 font-medium">
@@ -229,11 +319,72 @@ export default function AddEquipmentForm({
             <Text className="text-gray-700 mb-1 font-medium">
               Warehouse Location
             </Text>
+            <TouchableOpacity
+              onPress={() => setShowWarehouseDropdown(!showWarehouseDropdown)}
+              className="border border-gray-300 rounded-lg px-3 py-2 flex-row justify-between items-center"
+            >
+              <Text className={warehouseLocation ? "text-gray-800" : "text-gray-400"}>
+                {warehouseLocation || "Select warehouse location"}
+              </Text>
+              <Text className="text-gray-500">
+                {showWarehouseDropdown ? "▲" : "▼"}
+              </Text>
+            </TouchableOpacity>
+
+            {showWarehouseDropdown && (
+              <View className="border border-gray-300 rounded-lg mt-1 max-h-40 bg-white z-10">
+                <ScrollView>
+                  {warehouseOptions.map((item) => (
+                    <TouchableOpacity
+                      key={item.id}
+                      className="px-3 py-2 border-b border-gray-100"
+                      onPress={() => {
+                        setWarehouseLocation(item.name);
+                        setShowWarehouseDropdown(false);
+                      }}
+                    >
+                      <Text className="text-gray-800">{item.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                  <TouchableOpacity
+                    className="px-3 py-2 bg-blue-50"
+                    onPress={() => {
+                      setShowWarehouseDropdown(false);
+                      router.push("/equipment/warehouses");
+                    }}
+                  >
+                    <Text className="text-blue-600 font-medium">
+                      + Add New Warehouse
+                    </Text>
+                  </TouchableOpacity>
+                </ScrollView>
+              </View>
+            )}
+          </View>
+
+          <View className="mb-4">
+            <Text className="text-gray-700 mb-1 font-medium">
+              Minimum Stock Level
+            </Text>
             <TextInput
               className="border border-gray-300 rounded-lg px-3 py-2"
-              placeholder="Enter warehouse location"
-              value={warehouseLocation}
-              onChangeText={setWarehouseLocation}
+              placeholder="Enter minimum stock level for alerts"
+              value={minStockLevel}
+              onChangeText={setMinStockLevel}
+              keyboardType="numeric"
+            />
+          </View>
+
+          <View className="mb-4">
+            <Text className="text-gray-700 mb-1 font-medium">
+              Maximum Stock Level
+            </Text>
+            <TextInput
+              className="border border-gray-300 rounded-lg px-3 py-2"
+              placeholder="Enter maximum stock level"
+              value={maxStockLevel}
+              onChangeText={setMaxStockLevel}
+              keyboardType="numeric"
             />
           </View>
 
@@ -278,6 +429,20 @@ export default function AddEquipmentForm({
           />
         </View>
       </Modal>
+
+      {/* Quick Add Type Modal */}
+      <QuickAddTypeModal
+        visible={showQuickAddType}
+        onClose={() => setShowQuickAddType(false)}
+        onSuccess={handleTypeAdded}
+      />
+
+      {/* Quick Add Supplier Modal */}
+      <QuickAddSupplierModal
+        visible={showQuickAddSupplier}
+        onClose={() => setShowQuickAddSupplier(false)}
+        onSuccess={handleSupplierAdded}
+      />
     </View>
   );
 }

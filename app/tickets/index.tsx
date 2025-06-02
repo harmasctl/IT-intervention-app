@@ -208,8 +208,7 @@ export default function TicketsScreen() {
             <View className="flex-row items-center mt-1">
               <Package size={14} color="#6b7280" />
               <Text className="text-gray-500 text-sm ml-1">
-                {item.devices?.name || "Unknown Device"}
-                {item.devices?.type && ` (${item.devices.type})`}
+                {item.devices?.name || "Unknown Device"}{item.devices?.type ? ` (${item.devices.type})` : ""}
               </Text>
             </View>
           </View>

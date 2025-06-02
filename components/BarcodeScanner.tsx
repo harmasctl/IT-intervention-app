@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Platform, TextInput } from "react-native";
 import { Camera } from "expo-camera";
 import { BarCodeScanner } from "expo-barcode-scanner";
-import { X, ZoomIn, ZoomOut, RefreshCcw } from "lucide-react-native";
+import { X, ZoomIn, ZoomOut, RefreshCcw, Keyboard, Camera as CameraIcon } from "lucide-react-native";
 
 type BarcodeScannerProps = {
   onScan: (data: string, type: string) => void;
@@ -20,6 +20,8 @@ export default function BarcodeScanner({
   const [cameraType, setCameraType] = useState(BarCodeScanner.Constants.Type.back);
   const [zoom, setZoom] = useState(0);
   const [torch, setTorch] = useState(false);
+  const [showManualInput, setShowManualInput] = useState(Platform.OS === 'web');
+  const [manualCode, setManualCode] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -63,6 +65,14 @@ export default function BarcodeScanner({
     setTorch(!torch);
   };
 
+  const handleManualSubmit = () => {
+    if (manualCode.trim()) {
+      onScan(manualCode.trim(), 'manual');
+    } else {
+      Alert.alert('Error', 'Please enter a valid code');
+    }
+  };
+
   if (hasPermission === null) {
     return (
       <View className="flex-1 justify-center items-center bg-black">
@@ -71,16 +81,105 @@ export default function BarcodeScanner({
     );
   }
 
-  if (hasPermission === false) {
+  if (hasPermission === false || Platform.OS === 'web') {
     return (
-      <View className="flex-1 justify-center items-center bg-black">
-        <Text className="text-white">No access to camera</Text>
-        <TouchableOpacity
-          className="mt-4 bg-blue-600 px-4 py-2 rounded-lg"
-          onPress={onClose}
-        >
-          <Text className="text-white font-medium">Close</Text>
-        </TouchableOpacity>
+      <View className="flex-1 justify-center items-center bg-gray-900 px-6">
+        <View className="bg-white rounded-2xl p-6 w-full max-w-md">
+          <View className="flex-row items-center justify-between mb-6">
+            <Text className="text-xl font-bold text-gray-800">Enter Code Manually</Text>
+            <TouchableOpacity onPress={onClose}>
+              <X size={24} color="#6B7280" />
+            </TouchableOpacity>
+          </View>
+
+          <View className="mb-4">
+            <Text className="text-gray-700 mb-2 font-medium">Barcode/QR Code</Text>
+            <TextInput
+              className="border border-gray-300 rounded-lg px-4 py-3 text-gray-800"
+              placeholder="Enter barcode or QR code"
+              value={manualCode}
+              onChangeText={setManualCode}
+              autoFocus
+              onSubmitEditing={handleManualSubmit}
+            />
+          </View>
+
+          <View className="flex-row space-x-3">
+            <TouchableOpacity
+              className="flex-1 bg-gray-200 py-3 rounded-lg"
+              onPress={onClose}
+            >
+              <Text className="text-gray-800 font-medium text-center">Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              className="flex-1 bg-blue-600 py-3 rounded-lg"
+              onPress={handleManualSubmit}
+            >
+              <Text className="text-white font-medium text-center">Submit</Text>
+            </TouchableOpacity>
+          </View>
+
+          {Platform.OS !== 'web' && (
+            <TouchableOpacity
+              className="mt-4 bg-green-600 py-3 rounded-lg flex-row items-center justify-center"
+              onPress={() => setShowManualInput(false)}
+            >
+              <CameraIcon size={20} color="#ffffff" />
+              <Text className="text-white font-medium ml-2">Use Camera Instead</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    );
+  }
+
+  // Show manual input overlay if requested
+  if (showManualInput && Platform.OS !== 'web') {
+    return (
+      <View className="flex-1 justify-center items-center bg-gray-900 px-6">
+        <View className="bg-white rounded-2xl p-6 w-full max-w-md">
+          <View className="flex-row items-center justify-between mb-6">
+            <Text className="text-xl font-bold text-gray-800">Enter Code Manually</Text>
+            <TouchableOpacity onPress={() => setShowManualInput(false)}>
+              <X size={24} color="#6B7280" />
+            </TouchableOpacity>
+          </View>
+
+          <View className="mb-4">
+            <Text className="text-gray-700 mb-2 font-medium">Barcode/QR Code</Text>
+            <TextInput
+              className="border border-gray-300 rounded-lg px-4 py-3 text-gray-800"
+              placeholder="Enter barcode or QR code"
+              value={manualCode}
+              onChangeText={setManualCode}
+              autoFocus
+              onSubmitEditing={handleManualSubmit}
+            />
+          </View>
+
+          <View className="flex-row space-x-3">
+            <TouchableOpacity
+              className="flex-1 bg-gray-200 py-3 rounded-lg"
+              onPress={() => setShowManualInput(false)}
+            >
+              <Text className="text-gray-800 font-medium text-center">Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              className="flex-1 bg-blue-600 py-3 rounded-lg"
+              onPress={handleManualSubmit}
+            >
+              <Text className="text-white font-medium text-center">Submit</Text>
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity
+            className="mt-4 bg-green-600 py-3 rounded-lg flex-row items-center justify-center"
+            onPress={() => setShowManualInput(false)}
+          >
+            <CameraIcon size={20} color="#ffffff" />
+            <Text className="text-white font-medium ml-2">Use Camera Instead</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
@@ -123,6 +222,12 @@ export default function BarcodeScanner({
             onPress={onClose}
           >
             <X size={24} color="white" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            className="bg-black bg-opacity-50 p-2 rounded-full"
+            onPress={() => setShowManualInput(true)}
+          >
+            <Keyboard size={24} color="white" />
           </TouchableOpacity>
         </View>
 

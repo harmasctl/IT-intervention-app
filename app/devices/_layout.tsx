@@ -14,6 +14,7 @@ export default function DevicesLayout() {
       <Stack.Screen name="maintenance" options={{ headerShown: false }} />
       <Stack.Screen name="maintenance/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="qr-codes" options={{ headerShown: false }} />
+      <Stack.Screen name="transfers" options={{ headerShown: false }} />
     </Stack>
   );
 }

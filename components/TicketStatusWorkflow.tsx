@@ -27,9 +27,7 @@ export default function TicketStatusWorkflow({
 }: TicketStatusWorkflowProps) {
   const getNextStatus = (): TicketStatus | null => {
     switch (currentStatus) {
-      case "new":
-        return "assigned";
-      case "assigned":
+      case "open":
         return "in-progress";
       case "in-progress":
         return "resolved";
@@ -42,10 +40,8 @@ export default function TicketStatusWorkflow({
 
   const getStatusColor = (status: TicketStatus) => {
     switch (status) {
-      case "new":
+      case "open":
         return "bg-blue-100 text-blue-800";
-      case "assigned":
-        return "bg-purple-100 text-purple-800";
       case "in-progress":
         return "bg-amber-100 text-amber-800";
       case "resolved":
@@ -59,10 +55,8 @@ export default function TicketStatusWorkflow({
 
   const getStatusIcon = (status: TicketStatus) => {
     switch (status) {
-      case "new":
+      case "open":
         return <AlertCircle size={16} color="#1e40af" />;
-      case "assigned":
-        return <Clock size={16} color="#7e22ce" />;
       case "in-progress":
         return <Clock size={16} color="#b45309" />;
       case "resolved":
@@ -78,22 +72,9 @@ export default function TicketStatusWorkflow({
     const nextStatus = getNextStatus();
     if (!nextStatus) return;
 
-    // Check if ticket is assigned before allowing status change to in-progress
-    if (
-      currentStatus === "assigned" &&
-      nextStatus === "in-progress" &&
-      !assigneeId
-    ) {
-      Alert.alert(
-        "Ticket Not Assigned",
-        "This ticket needs to be assigned to a technician before it can be marked as in-progress.",
-      );
-      return;
-    }
-
     // Check if user is the assignee for certain status changes
     if (
-      (currentStatus === "assigned" || currentStatus === "in-progress") &&
+      currentStatus === "in-progress" &&
       !isAssignee
     ) {
       Alert.alert(

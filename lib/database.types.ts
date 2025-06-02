@@ -134,8 +134,34 @@ export interface Database {
           assigned_at: string | null
           resolved_at: string | null
           first_response_at: string | null
-          sla_due_at: string | null
           created_by: string | null
+
+          // Helpdesk fields
+          jira_ticket_id: string | null
+          customer_report: string | null
+          problem_description: string | null
+          initial_diagnosis: string | null
+          remote_steps_attempted: string | null
+          business_impact: string | null
+          requires_onsite: boolean | null
+          estimated_duration: string | null
+          urgency_level: string | null
+          preferred_time_slot: string | null
+          contact_person: string | null
+          contact_phone: string | null
+          access_instructions: string | null
+
+          // Equipment planning fields
+          required_equipment: string[] | null
+          intervention_type: string | null
+          estimated_cost: string | null
+          warranty_status: string | null
+
+          // Resolution fields
+          resolution_notes: string | null
+          technician_notes: string | null
+          time_spent_minutes: number | null
+          total_cost: number | null
         }
         Insert: {
           id?: string
@@ -154,8 +180,34 @@ export interface Database {
           assigned_at?: string | null
           resolved_at?: string | null
           first_response_at?: string | null
-          sla_due_at?: string | null
           created_by?: string | null
+
+          // Helpdesk fields
+          jira_ticket_id?: string | null
+          customer_report?: string | null
+          problem_description?: string | null
+          initial_diagnosis?: string | null
+          remote_steps_attempted?: string | null
+          business_impact?: string | null
+          requires_onsite?: boolean | null
+          estimated_duration?: string | null
+          urgency_level?: string | null
+          preferred_time_slot?: string | null
+          contact_person?: string | null
+          contact_phone?: string | null
+          access_instructions?: string | null
+
+          // Equipment planning fields
+          required_equipment?: string[] | null
+          intervention_type?: string | null
+          estimated_cost?: string | null
+          warranty_status?: string | null
+
+          // Resolution fields
+          resolution_notes?: string | null
+          technician_notes?: string | null
+          time_spent_minutes?: number | null
+          total_cost?: number | null
         }
         Update: {
           id?: string
@@ -174,8 +226,34 @@ export interface Database {
           assigned_at?: string | null
           resolved_at?: string | null
           first_response_at?: string | null
-          sla_due_at?: string | null
           created_by?: string | null
+
+          // Helpdesk fields
+          jira_ticket_id?: string | null
+          customer_report?: string | null
+          problem_description?: string | null
+          initial_diagnosis?: string | null
+          remote_steps_attempted?: string | null
+          business_impact?: string | null
+          requires_onsite?: boolean | null
+          estimated_duration?: string | null
+          urgency_level?: string | null
+          preferred_time_slot?: string | null
+          contact_person?: string | null
+          contact_phone?: string | null
+          access_instructions?: string | null
+
+          // Equipment planning fields
+          required_equipment?: string[] | null
+          intervention_type?: string | null
+          estimated_cost?: string | null
+          warranty_status?: string | null
+
+          // Resolution fields
+          resolution_notes?: string | null
+          technician_notes?: string | null
+          time_spent_minutes?: number | null
+          total_cost?: number | null
         }
       }
       equipment_inventory: {

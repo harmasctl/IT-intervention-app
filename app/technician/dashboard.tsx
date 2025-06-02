@@ -69,7 +69,7 @@ export default function TechnicianDashboard() {
   const fetchTickets = async () => {
     try {
       setLoading(true);
-      
+
       let query = supabase
         .from("tickets")
         .select(`
@@ -82,7 +82,6 @@ export default function TechnicianDashboard() {
           estimated_duration,
           preferred_time_slot,
           access_instructions,
-          sla_due_at,
           created_at,
           jira_ticket_id,
           restaurant:restaurants(name, location, contact_phone),
@@ -302,14 +301,7 @@ export default function TechnicianDashboard() {
         </View>
       )}
 
-      {ticket.sla_due_at && (
-        <View className="flex-row items-center mb-3">
-          <AlertTriangle size={14} color="#EF4444" />
-          <Text className="text-red-600 text-sm ml-1">
-            Due: {new Date(ticket.sla_due_at).toLocaleDateString()} {new Date(ticket.sla_due_at).toLocaleTimeString()}
-          </Text>
-        </View>
-      )}
+
 
       {/* Action Buttons */}
       <View className="flex-row justify-between pt-3 border-t border-gray-100">

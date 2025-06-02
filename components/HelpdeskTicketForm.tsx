@@ -58,9 +58,6 @@ interface HelpdeskTicketData {
   jiraTicketId: string;
   customerReport: string;
   problemDescription: string;
-  initialDiagnosis: string;
-  remoteStepsAttempted: string;
-  businessImpact: string;
 
   // Field Technician Info
   requiresOnSite: boolean;
@@ -76,6 +73,10 @@ interface HelpdeskTicketData {
   // Documentation
   photos: string[];
   diagnosticInfo: string;
+
+  // Equipment & Intervention Planning
+  requiredEquipment: string[];
+  interventionType: "repair" | "replacement" | "maintenance" | "installation" | "diagnostic";
 }
 
 interface HelpdeskTicketFormProps {
@@ -95,9 +96,6 @@ const HelpdeskTicketForm = ({ onSubmit, onCancel, isSubmitting = false }: Helpde
     jiraTicketId: "",
     customerReport: "",
     problemDescription: "",
-    initialDiagnosis: "",
-    remoteStepsAttempted: "",
-    businessImpact: "",
     requiresOnSite: true,
     estimatedDuration: "2",
     urgencyLevel: "normal",
@@ -107,6 +105,8 @@ const HelpdeskTicketForm = ({ onSubmit, onCancel, isSubmitting = false }: Helpde
     accessInstructions: "",
     photos: [],
     diagnosticInfo: "",
+    requiredEquipment: [],
+    interventionType: "repair",
   });
 
   const [devices, setDevices] = useState<DeviceOption[]>([]);
@@ -291,7 +291,7 @@ const HelpdeskTicketForm = ({ onSubmit, onCancel, isSubmitting = false }: Helpde
 
   const renderStepIndicator = () => (
     <View className="flex-row justify-center my-4">
-      {[0, 1, 2, 3, 4].map((step) => (
+      {[0, 1, 2, 3, 4, 5].map((step) => (
         <View
           key={step}
           className={`h-2 w-2 rounded-full mx-1 ${
@@ -307,6 +307,7 @@ const HelpdeskTicketForm = ({ onSubmit, onCancel, isSubmitting = false }: Helpde
     "Problem Details",
     "Device & Location",
     "Field Work Info",
+    "Equipment & Cost",
     "Review & Submit"
   ];
 
@@ -417,35 +418,7 @@ const HelpdeskTicketForm = ({ onSubmit, onCancel, isSubmitting = false }: Helpde
               numberOfLines={4}
             />
 
-            <Text className="text-sm font-medium text-gray-700 mb-2">Initial Diagnosis</Text>
-            <TextInput
-              className="bg-gray-100 p-4 rounded-lg text-base mb-4"
-              placeholder="Your initial assessment of the problem"
-              value={ticketData.initialDiagnosis}
-              onChangeText={(text) => updateTicketData("initialDiagnosis", text)}
-              multiline
-              numberOfLines={3}
-            />
 
-            <Text className="text-sm font-medium text-gray-700 mb-2">Remote Steps Attempted</Text>
-            <TextInput
-              className="bg-gray-100 p-4 rounded-lg text-base mb-4"
-              placeholder="What troubleshooting steps have you already tried remotely?"
-              value={ticketData.remoteStepsAttempted}
-              onChangeText={(text) => updateTicketData("remoteStepsAttempted", text)}
-              multiline
-              numberOfLines={4}
-            />
-
-            <Text className="text-sm font-medium text-gray-700 mb-2">Business Impact</Text>
-            <TextInput
-              className="bg-gray-100 p-4 rounded-lg text-base mb-4"
-              placeholder="How is this affecting restaurant operations?"
-              value={ticketData.businessImpact}
-              onChangeText={(text) => updateTicketData("businessImpact", text)}
-              multiline
-              numberOfLines={3}
-            />
           </View>
         )}
 
@@ -647,6 +620,49 @@ const HelpdeskTicketForm = ({ onSubmit, onCancel, isSubmitting = false }: Helpde
 
         {currentStep === 4 && (
           <View>
+            <Text className="text-lg font-bold mb-4 text-gray-800">🔧 Equipment & Cost Planning</Text>
+
+            <Text className="text-sm font-medium text-gray-700 mb-2">Intervention Type</Text>
+            <View className="bg-gray-100 rounded-lg mb-4">
+              <Picker
+                selectedValue={ticketData.interventionType}
+                onValueChange={(value) => updateTicketData("interventionType", value)}
+                style={{ height: 50 }}
+              >
+                <Picker.Item label="🔧 Repair - Fix existing equipment" value="repair" />
+                <Picker.Item label="🔄 Replacement - Replace faulty equipment" value="replacement" />
+                <Picker.Item label="🛠️ Maintenance - Preventive maintenance" value="maintenance" />
+                <Picker.Item label="📦 Installation - Install new equipment" value="installation" />
+                <Picker.Item label="🔍 Diagnostic - Investigate issue" value="diagnostic" />
+              </Picker>
+            </View>
+
+            <Text className="text-sm font-medium text-gray-700 mb-2">Required Equipment/Parts</Text>
+            <TextInput
+              className="bg-gray-100 p-4 rounded-lg text-base mb-4"
+              placeholder="List equipment, parts, or tools needed (one per line)"
+              value={ticketData.requiredEquipment.join('\n')}
+              onChangeText={(text) => updateTicketData("requiredEquipment", text.split('\n').filter(item => item.trim()))}
+              multiline
+              numberOfLines={4}
+            />
+
+
+
+            <View className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+              <Text className="text-blue-800 font-medium mb-2">💡 Equipment Planning Tips</Text>
+              <Text className="text-blue-700 text-sm">
+                • Check inventory before ordering{"\n"}
+                • Consider backup equipment needs{"\n"}
+                • Verify compatibility with existing systems{"\n"}
+                • Include installation materials if needed
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {currentStep === 5 && (
+          <View>
             <Text className="text-lg font-bold mb-4 text-gray-800">📋 Review & Submit</Text>
 
             <View className="bg-gray-50 p-4 rounded-lg mb-4">
@@ -660,6 +676,7 @@ const HelpdeskTicketForm = ({ onSubmit, onCancel, isSubmitting = false }: Helpde
               <Text className="text-gray-700 mb-1"><Text className="font-medium">Device:</Text> {ticketData.device?.name}</Text>
               <Text className="text-gray-700 mb-1"><Text className="font-medium">On-site Required:</Text> {ticketData.requiresOnSite ? "Yes" : "No"}</Text>
               <Text className="text-gray-700 mb-1"><Text className="font-medium">Estimated Duration:</Text> {ticketData.estimatedDuration} hours</Text>
+              <Text className="text-gray-700 mb-1"><Text className="font-medium">Intervention Type:</Text> {ticketData.interventionType}</Text>
             </View>
 
             <Text className="text-sm font-medium text-gray-700 mb-2">Additional Diagnostic Information</Text>

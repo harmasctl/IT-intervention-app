@@ -115,10 +115,10 @@ export default function RestaurantDetailScreen() {
 
       if (data) {
         setRestaurant(data);
-        
+
         // Fetch device statistics
         await fetchDeviceStatistics(id);
-        
+
         // Fetch maintenance information
         await fetchMaintenanceInfo(id);
       } else {
@@ -188,7 +188,7 @@ export default function RestaurantDetailScreen() {
 
         // Get overdue maintenance
         const today = new Date();
-        const overdueMaintenance = devices.filter(device => 
+        const overdueMaintenance = devices.filter(device =>
           device.next_maintenance_date && new Date(device.next_maintenance_date) < today
         );
 
@@ -357,7 +357,7 @@ export default function RestaurantDetailScreen() {
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
       <StatusBar style="dark" />
-      
+
       <View className="flex-row justify-between items-center p-4 border-b border-gray-200 bg-white">
         <View className="flex-row items-center">
           <TouchableOpacity onPress={() => router.back()} className="mr-4">
@@ -424,7 +424,7 @@ export default function RestaurantDetailScreen() {
           <Text className="text-2xl font-bold text-gray-900 mb-2">
             {restaurant.name}
           </Text>
-          
+
           {restaurant.address && (
             <View className="flex-row items-start mt-2">
               <MapPin size={18} color="#6B7280" className="mr-2 mt-1" />
@@ -434,28 +434,28 @@ export default function RestaurantDetailScreen() {
                   </Text>
             </View>
           )}
-          
+
           {restaurant.phone && (
             <View className="flex-row items-center mt-3">
               <Phone size={18} color="#6B7280" className="mr-2" />
               <Text className="text-gray-700">{restaurant.phone}</Text>
             </View>
           )}
-          
+
           {restaurant.email && (
             <View className="flex-row items-center mt-3">
               <Mail size={18} color="#6B7280" className="mr-2" />
               <Text className="text-gray-700">{restaurant.email}</Text>
             </View>
           )}
-          
+
           {restaurant.manager_name && (
             <View className="flex-row items-center mt-3">
               <User size={18} color="#6B7280" className="mr-2" />
               <Text className="text-gray-700">Manager: {restaurant.manager_name}</Text>
             </View>
           )}
-          
+
           {restaurant.operating_hours && (
             <View className="flex-row items-center mt-3">
               <Clock size={18} color="#6B7280" className="mr-2" />
@@ -463,11 +463,11 @@ export default function RestaurantDetailScreen() {
             </View>
                 )}
               </View>
-        
+
         {/* Device Statistics */}
         <View className="bg-white p-4 mb-4">
           <Text className="text-lg font-semibold text-gray-800 mb-3">Equipment Status</Text>
-          
+
           <View className="flex-row justify-between mb-4">
             <View className="items-center">
               <Text className="text-2xl font-bold text-blue-600">{deviceInfo.total_count}</Text>
@@ -501,22 +501,22 @@ export default function RestaurantDetailScreen() {
             <ChevronRight size={18} color="#3B82F6" />
           </TouchableOpacity>
         </View>
-        
+
         {/* Maintenance Info */}
         <View className="bg-white p-4 mb-4">
           <Text className="text-lg font-semibold text-gray-800 mb-3">Maintenance</Text>
-          
+
           <View className="flex-row justify-between mb-4">
             <View className="items-center">
               <Text className="text-2xl font-bold text-amber-600">{maintenanceInfo.pending_count}</Text>
               <Text className="text-gray-600 text-sm">Pending</Text>
             </View>
-            
+
             <View className="items-center">
               <Text className="text-2xl font-bold text-red-600">{maintenanceInfo.overdue_count}</Text>
               <Text className="text-gray-600 text-sm">Overdue</Text>
             </View>
-            
+
             <View className="items-center">
               <View className="flex-row items-center">
                 <Calendar size={18} color="#6B7280" className="mr-1" />
@@ -525,9 +525,9 @@ export default function RestaurantDetailScreen() {
               <Text className="text-gray-600 text-sm">Next Scheduled</Text>
             </View>
           </View>
-          
+
           <TouchableOpacity
-            className="flex-row justify-between items-center py-2 border-t border-gray-100"
+            className="flex-row justify-between items-center py-3 border-t border-gray-100"
             onPress={handleViewMaintenance}
           >
             <View className="flex-row items-center">
@@ -537,9 +537,49 @@ export default function RestaurantDetailScreen() {
             <ChevronRight size={18} color="#3B82F6" />
           </TouchableOpacity>
         </View>
-        
+
+        {/* Quick Actions */}
+        <View className="bg-white p-4 mb-4">
+          <Text className="text-lg font-semibold text-gray-800 mb-3">Quick Actions</Text>
+
+          <View className="space-y-3">
+            <TouchableOpacity
+              className="flex-row items-center justify-between py-3 px-4 bg-blue-50 rounded-lg"
+              onPress={() => router.push(`/tickets/create?restaurant_id=${restaurant.id}`)}
+            >
+              <View className="flex-row items-center">
+                <Plus size={20} color="#3B82F6" />
+                <Text className="text-blue-700 font-medium ml-3">Create Ticket</Text>
+              </View>
+              <ChevronRight size={18} color="#3B82F6" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              className="flex-row items-center justify-between py-3 px-4 bg-green-50 rounded-lg"
+              onPress={() => router.push(`/devices/create?restaurant_id=${restaurant.id}`)}
+            >
+              <View className="flex-row items-center">
+                <Package size={20} color="#10B981" />
+                <Text className="text-green-700 font-medium ml-3">Add Device</Text>
+              </View>
+              <ChevronRight size={18} color="#10B981" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              className="flex-row items-center justify-between py-3 px-4 bg-orange-50 rounded-lg"
+              onPress={() => router.push(`/maintenance/schedule?restaurant_id=${restaurant.id}`)}
+            >
+              <View className="flex-row items-center">
+                <Calendar size={20} color="#F59E0B" />
+                <Text className="text-orange-700 font-medium ml-3">Schedule Maintenance</Text>
+              </View>
+              <ChevronRight size={18} color="#F59E0B" />
+            </TouchableOpacity>
+          </View>
+        </View>
+
         <View className="h-10" />
       </ScrollView>
     </SafeAreaView>
   );
-} 
+}

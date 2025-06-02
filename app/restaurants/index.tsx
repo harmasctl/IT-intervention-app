@@ -33,6 +33,7 @@ import {
   Filter,
   ArrowRight,
   Map,
+  Edit,
 } from "lucide-react-native";
 import { supabase } from "../../lib/supabase";
 import * as ImagePicker from "expo-image-picker";
@@ -110,18 +111,18 @@ export default function RestaurantsScreen() {
   const fetchRestaurants = async () => {
     try {
       setLoading(true);
-      
+
       const { data, error } = await supabase
         .from('restaurants')
         .select('*')
         .order('name');
-      
+
       if (error) {
         console.error('Error fetching restaurants:', error);
         Alert.alert('Error', 'Failed to load restaurants');
         return;
       }
-      
+
       setRestaurants(data || []);
     } catch (error) {
       console.error('Error in fetchRestaurants:', error);
@@ -134,7 +135,7 @@ export default function RestaurantsScreen() {
 
   const applyFilters = () => {
     let filtered = [...restaurants];
-    
+
     // Apply search query filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
@@ -148,21 +149,21 @@ export default function RestaurantsScreen() {
           restaurant.email?.toLowerCase().includes(query)
       );
     }
-    
+
     // Apply city filter
     if (filters.city) {
       filtered = filtered.filter(
         restaurant => restaurant.city?.toLowerCase().includes(filters.city.toLowerCase())
       );
     }
-    
+
     // Apply state filter
     if (filters.state) {
       filtered = filtered.filter(
         restaurant => restaurant.state?.toLowerCase().includes(filters.state.toLowerCase())
       );
     }
-    
+
     setFilteredRestaurants(filtered);
   };
 
@@ -195,51 +196,51 @@ export default function RestaurantsScreen() {
 
     try {
       setUploadingImage(true);
-      
+
       // Get the file extension
       const fileExt = imageUri.split(".").pop()?.toLowerCase() || "jpeg";
       const fileName = `${restaurantId}.${fileExt}`;
       const filePath = `${fileName}`;
-      
+
       // Convert image to base64
       const response = await fetch(imageUri);
       const blob = await response.blob();
       const reader = new FileReader();
-      
+
       return new Promise((resolve, reject) => {
         reader.onload = async () => {
           const base64 = reader.result as string;
           const base64Data = base64.split(",")[1];
-          
+
           if (!base64Data) {
             reject(new Error("Failed to process image"));
             return;
           }
-          
+
           const { data, error } = await supabase.storage
             .from("restaurant-photos")
             .upload(filePath, decode(base64Data), {
               contentType: `image/${fileExt}`,
               upsert: true,
             });
-            
+
           if (error) {
             console.error("Error uploading image:", error);
             reject(error);
             return;
           }
-          
+
           const { data: publicUrlData } = supabase.storage
             .from("restaurant-photos")
             .getPublicUrl(filePath);
-            
+
           resolve(publicUrlData.publicUrl);
         };
-        
+
         reader.onerror = () => {
           reject(new Error("Failed to read file"));
         };
-        
+
         reader.readAsDataURL(blob);
       });
     } catch (error) {
@@ -284,7 +285,7 @@ export default function RestaurantsScreen() {
         // Upload image if available
         const restaurantId = data[0].id;
         const imageUrl = await uploadImage(restaurantId);
-        
+
         if (imageUrl) {
           // Update restaurant with image URL
           await supabase
@@ -367,7 +368,7 @@ export default function RestaurantsScreen() {
       style={{ elevation: 2 }}
     >
       <View className="flex-row justify-between items-start">
-        <View className="flex-row items-center">
+        <View className="flex-row items-center flex-1">
           <View className="bg-blue-100 p-2 rounded-full mr-3">
             <Building2 size={24} color="#1e40af" />
           </View>
@@ -377,9 +378,25 @@ export default function RestaurantsScreen() {
               {getStatusIcon(item.status)}
               <Text className="text-gray-500 text-sm ml-1">{getStatusText(item.status)}</Text>
             </View>
+            {item.address && (
+              <Text className="text-gray-400 text-sm mt-1" numberOfLines={1}>
+                {item.address}
+              </Text>
+            )}
           </View>
         </View>
-        <ChevronRight size={20} color="#9ca3af" />
+        <View className="flex-row items-center">
+          <TouchableOpacity
+            className="p-2 mr-2"
+            onPress={(e) => {
+              e.stopPropagation();
+              router.push(`/restaurants/edit/${item.id}`);
+            }}
+          >
+            <Edit size={18} color="#6b7280" />
+          </TouchableOpacity>
+          <ChevronRight size={20} color="#9ca3af" />
+        </View>
       </View>
 
       <View className="mt-3 border-t border-gray-100 pt-3">
@@ -432,9 +449,9 @@ export default function RestaurantsScreen() {
             <Building2 size={24} color="#0F172A" />
             <Text className="text-xl font-bold ml-2 text-gray-800">Restaurants</Text>
           </View>
-          
+
           <View className="flex-row">
-            <TouchableOpacity 
+            <TouchableOpacity
               className="mr-3 bg-blue-500 p-2 rounded-full"
               onPress={() => {
                 console.log("Navigating to device map");
@@ -443,7 +460,7 @@ export default function RestaurantsScreen() {
             >
               <Map size={20} color="#FFFFFF" />
             </TouchableOpacity>
-            <TouchableOpacity 
+            <TouchableOpacity
               className="mr-3 bg-green-500 p-2 rounded-full"
               onPress={() => {
                 console.log("Navigating to simple map");
@@ -452,7 +469,7 @@ export default function RestaurantsScreen() {
             >
               <Map size={20} color="#FFFFFF" />
             </TouchableOpacity>
-            <TouchableOpacity 
+            <TouchableOpacity
               className="bg-blue-500 p-2 rounded-full"
               onPress={() => setShowAddModal(true)}
             >
@@ -460,7 +477,7 @@ export default function RestaurantsScreen() {
             </TouchableOpacity>
           </View>
         </View>
-        
+
         {/* Search Bar */}
         <View className="flex-row mt-4">
           <View className="flex-1 flex-row items-center bg-gray-100 rounded-lg px-3 py-2">
@@ -472,7 +489,7 @@ export default function RestaurantsScreen() {
               onChangeText={setSearchQuery}
             />
           </View>
-          
+
           <TouchableOpacity
             className="ml-2 bg-gray-100 p-2 rounded-lg items-center justify-center"
             onPress={showFilterOptions}

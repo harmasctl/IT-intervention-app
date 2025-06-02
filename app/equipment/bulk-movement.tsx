@@ -32,21 +32,22 @@ import EquipmentTabs from "../../components/EquipmentTabs";
 type EquipmentItem = {
   id: string;
   name: string;
-  model?: string;
-  quantity: number;
-  equipment_type_id: string;
-  warehouse_id: string;
-  type_name?: string;
-  warehouse_name?: string;
+  type: string;
+  stock_level: number;
+  warehouse_location: string;
+  supplier?: string;
+  description?: string;
+  sku?: string;
+  cost?: number;
 };
 
 type MovementItem = {
   equipmentId: string;
   name: string;
-  model?: string;
+  type: string;
   quantity: number;
   currentQuantity: number;
-  typeName?: string;
+  sku?: string;
 };
 
 export default function BulkMovementScreen() {
@@ -77,10 +78,8 @@ export default function BulkMovementScreen() {
   const [loadingWarehouses, setLoadingWarehouses] = useState(false);
 
   useEffect(() => {
-    if (sourceWarehouse) {
-      fetchEquipment();
-    }
-  }, [sourceWarehouse]);
+    fetchEquipment();
+  }, [sourceWarehouse, sourceWarehouseName, movementType]);
 
   useEffect(() => {
     filterEquipment();
@@ -108,27 +107,22 @@ export default function BulkMovementScreen() {
   };
 
   const fetchEquipment = async () => {
-    if (!sourceWarehouse) return;
-
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from("equipment_inventory")
-        .select(
-          "*, equipment_type:equipment_type_id(name), warehouse:warehouse_id(name)",
-        )
-        .eq("warehouse_id", sourceWarehouse);
+      let query = supabase.from("equipment_inventory").select("*");
+
+      // If source warehouse is selected for "out" movements, filter by warehouse name
+      if (sourceWarehouseName && movementType === "out") {
+        query = query.eq("warehouse_location", sourceWarehouseName);
+      }
+
+      const { data, error } = await query.order("name");
 
       if (error) throw error;
 
       if (data) {
-        const formattedData = data.map((item) => ({
-          ...item,
-          type_name: item.equipment_type?.name,
-          warehouse_name: item.warehouse?.name,
-        }));
-        setEquipment(formattedData);
-        setFilteredEquipment(formattedData);
+        setEquipment(data as EquipmentItem[]);
+        setFilteredEquipment(data as EquipmentItem[]);
       }
     } catch (error) {
       console.error("Error fetching equipment:", error);
@@ -148,8 +142,9 @@ export default function BulkMovementScreen() {
     const filtered = equipment.filter(
       (item) =>
         item.name.toLowerCase().includes(query) ||
-        item.model?.toLowerCase().includes(query) ||
-        item.type_name?.toLowerCase().includes(query),
+        item.type.toLowerCase().includes(query) ||
+        item.sku?.toLowerCase().includes(query) ||
+        item.description?.toLowerCase().includes(query),
     );
 
     setFilteredEquipment(filtered);
@@ -189,10 +184,10 @@ export default function BulkMovementScreen() {
     const newItem: MovementItem = {
       equipmentId: item.id,
       name: item.name,
-      model: item.model,
+      type: item.type,
       quantity: 1, // Default quantity
-      currentQuantity: item.quantity,
-      typeName: item.type_name,
+      currentQuantity: item.stock_level,
+      sku: item.sku,
     };
 
     setSelectedItems([...selectedItems, newItem]);
@@ -245,46 +240,45 @@ export default function BulkMovementScreen() {
       for (const item of selectedItems) {
         // Create movement record
         const { error: movementError } = await supabase
-          .from("inventory_movements")
+          .from("equipment_movements")
           .insert([
             {
               equipment_id: item.equipmentId,
-              warehouse_id:
-                movementType === "in" ? destinationWarehouse : sourceWarehouse,
               movement_type: movementType,
               quantity: item.quantity,
-              reference_number: referenceNumber || null,
-              notes: notes || null,
-              performed_by: user?.id,
+              notes: `${movementType === "in" ? "Bulk receive" : "Bulk dispatch"} - ${notes || "No notes"}`,
+              previous_level: item.currentQuantity,
+              new_level: movementType === "in"
+                ? item.currentQuantity + item.quantity
+                : item.currentQuantity - item.quantity,
             },
           ]);
 
         if (movementError) throw movementError;
 
         // Update inventory quantity
-        if (movementType === "in") {
-          // For "in" movements, increase quantity at destination
-          const { error: updateError } = await supabase
-            .from("equipment_inventory")
-            .update({
-              quantity: item.currentQuantity + item.quantity,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", item.equipmentId);
+        const newStockLevel = movementType === "in"
+          ? item.currentQuantity + item.quantity
+          : item.currentQuantity - item.quantity;
 
-          if (updateError) throw updateError;
-        } else if (movementType === "out") {
-          // For "out" movements, decrease quantity at source
-          const { error: updateError } = await supabase
-            .from("equipment_inventory")
-            .update({
-              quantity: item.currentQuantity - item.quantity,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", item.equipmentId);
+        const updateData: any = {
+          stock_level: newStockLevel,
+        };
 
-          if (updateError) throw updateError;
+        // If it's an "in" movement and destination warehouse is selected, update warehouse location
+        if (movementType === "in" && destinationWarehouse) {
+          const warehouse = warehouses.find(w => w.id === destinationWarehouse);
+          if (warehouse) {
+            updateData.warehouse_location = warehouse.name;
+          }
         }
+
+        const { error: updateError } = await supabase
+          .from("equipment_inventory")
+          .update(updateData)
+          .eq("id", item.equipmentId);
+
+        if (updateError) throw updateError;
       }
 
       Alert.alert(
@@ -308,13 +302,16 @@ export default function BulkMovementScreen() {
       <View className="flex-row justify-between items-center">
         <View className="flex-1">
           <Text className="font-bold text-gray-800">{item.name}</Text>
-          {item.model && (
-            <Text className="text-gray-500 text-sm">Model: {item.model}</Text>
+          {item.sku && (
+            <Text className="text-gray-500 text-sm">SKU: {item.sku}</Text>
           )}
-          <Text className="text-gray-500 text-sm">Type: {item.type_name}</Text>
+          <Text className="text-gray-500 text-sm">Type: {item.type}</Text>
           <Text className="text-gray-500 text-sm">
-            Available: {item.quantity}
+            Available: {item.stock_level}
           </Text>
+          {item.warehouse_location && (
+            <Text className="text-gray-500 text-sm">Location: {item.warehouse_location}</Text>
+          )}
         </View>
         <View className="bg-blue-100 p-2 rounded-full">
           <Plus size={18} color="#1e40af" />
@@ -334,12 +331,10 @@ export default function BulkMovementScreen() {
       <View className="flex-row justify-between items-start">
         <View className="flex-1">
           <Text className="font-bold text-gray-800">{item.name}</Text>
-          {item.model && (
-            <Text className="text-gray-500 text-sm">Model: {item.model}</Text>
+          {item.sku && (
+            <Text className="text-gray-500 text-sm">SKU: {item.sku}</Text>
           )}
-          {item.typeName && (
-            <Text className="text-gray-500 text-sm">Type: {item.typeName}</Text>
-          )}
+          <Text className="text-gray-500 text-sm">Type: {item.type}</Text>
           <Text className="text-gray-500 text-sm">
             Available: {item.currentQuantity}
           </Text>

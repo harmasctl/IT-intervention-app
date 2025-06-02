@@ -10,6 +10,9 @@ export default function EquipmentLayout() {
       <Stack.Screen name="warehouses" options={{ headerShown: false }} />
       <Stack.Screen name="types" options={{ headerShown: false }} />
       <Stack.Screen name="bulk-movement" options={{ headerShown: false }} />
+      <Stack.Screen name="reports" options={{ headerShown: false }} />
+      <Stack.Screen name="low-stock" options={{ headerShown: false }} />
+      <Stack.Screen name="purchase-order" options={{ headerShown: false }} />
     </Stack>
   );
 }

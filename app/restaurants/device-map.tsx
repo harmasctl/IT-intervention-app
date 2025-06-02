@@ -13,19 +13,19 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { useRouter } from "expo-router";
-import { 
-  ArrowLeft, 
-  Map, 
-  MapPin, 
-  Package, 
-  Filter, 
-  CheckCircle, 
-  AlertCircle, 
-  Clock, 
-  Laptop, 
-  Printer, 
-  Smartphone, 
-  Wifi, 
+import {
+  ArrowLeft,
+  Map,
+  MapPin,
+  Package,
+  Filter,
+  CheckCircle,
+  AlertCircle,
+  Clock,
+  Laptop,
+  Printer,
+  Smartphone,
+  Wifi,
   Server,
   Search,
   X,
@@ -85,14 +85,12 @@ export default function RestaurantDeviceMap() {
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedDeviceType, setSelectedDeviceType] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [expandedRestaurant, setExpandedRestaurant] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [filteredRestaurants, setFilteredRestaurants] = useState<Restaurant[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [filterTab, setFilterTab] = useState<'type' | 'category'>('type');
 
   // Fetch restaurants and their devices
   useEffect(() => {
@@ -104,14 +102,14 @@ export default function RestaurantDeviceMap() {
   useEffect(() => {
     if (restaurants.length > 0) {
       let filtered = [...restaurants];
-      
+
       // Apply search filter
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
-        filtered = filtered.filter(restaurant => 
+        filtered = filtered.filter(restaurant =>
           restaurant.name.toLowerCase().includes(query) ||
           restaurant.address?.toLowerCase().includes(query) ||
-          restaurant.devices?.some(device => 
+          restaurant.devices?.some(device =>
             device.name.toLowerCase().includes(query) ||
             device.model.toLowerCase().includes(query) ||
             device.type.toLowerCase().includes(query) ||
@@ -119,7 +117,7 @@ export default function RestaurantDeviceMap() {
           )
         );
       }
-      
+
       setFilteredRestaurants(filtered);
     } else {
       setFilteredRestaurants([]);
@@ -130,7 +128,7 @@ export default function RestaurantDeviceMap() {
     try {
       setLoading(true);
       console.log("Fetching restaurants...");
-      
+
       // First fetch restaurants
       const { data: restaurantsData, error: restaurantsError } = await supabase
         .from("restaurants")
@@ -142,7 +140,7 @@ export default function RestaurantDeviceMap() {
       }
 
       console.log(`Fetched ${restaurantsData?.length || 0} restaurants`);
-      
+
       // Then fetch all devices
       const { data: devicesData, error: devicesError } = await supabase
         .from("devices")
@@ -163,7 +161,7 @@ export default function RestaurantDeviceMap() {
           ...device,
           category_name: device.device_categories?.name
         }));
-        
+
         return {
           ...restaurant,
           devices: restaurantDevices || []
@@ -205,32 +203,17 @@ export default function RestaurantDeviceMap() {
     fetchCategories();
   };
 
-  // Filter devices by type and/or category
-  const filterDevicesByTypeAndCategory = (devices: Device[] | undefined) => {
+  // Filter devices by category
+  const filterDevicesByCategory = (devices: Device[] | undefined) => {
     if (!devices) return [];
-    
+
     let filtered = [...devices];
-    
-    if (selectedDeviceType) {
-      filtered = filtered.filter(device => device.type === selectedDeviceType);
-    }
-    
+
     if (selectedCategory) {
       filtered = filtered.filter(device => device.category_id === selectedCategory);
     }
-    
-    return filtered;
-  };
 
-  // Get unique device types from all restaurants
-  const getUniqueDeviceTypes = () => {
-    const types = new Set<string>();
-    restaurants.forEach(restaurant => {
-      restaurant.devices?.forEach(device => {
-        if (device.type) types.add(device.type);
-      });
-    });
-    return Array.from(types);
+    return filtered;
   };
 
   // Get device icon based on type
@@ -254,7 +237,7 @@ export default function RestaurantDeviceMap() {
     let operational = 0;
     let maintenance = 0;
     let offline = 0;
-    
+
     restaurants.forEach(restaurant => {
       if (restaurant.devices) {
         // Apply category filter if selected
@@ -262,27 +245,23 @@ export default function RestaurantDeviceMap() {
         if (selectedCategory) {
           filteredDevices = filteredDevices.filter(d => d.category_id === selectedCategory);
         }
-        // Apply type filter if selected
-        if (selectedDeviceType) {
-          filteredDevices = filteredDevices.filter(d => d.type === selectedDeviceType);
-        }
-        
+
         totalDevices += filteredDevices.length;
         operational += filteredDevices.filter(d => d.status === 'operational').length;
         maintenance += filteredDevices.filter(d => d.status === 'maintenance').length;
         offline += filteredDevices.filter(d => d.status === 'offline').length;
       }
     });
-    
+
     return { totalDevices, operational, maintenance, offline };
   };
-  
+
   const stats = calculateDeviceStats();
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
       <StatusBar style="dark" />
-      
+
       <View className="flex-row justify-between items-center p-4 border-b border-gray-200 bg-white">
         <View className="flex-row items-center">
           <TouchableOpacity onPress={() => router.back()} className="mr-4">
@@ -292,7 +271,7 @@ export default function RestaurantDeviceMap() {
         </View>
         <Map size={24} color="#0F172A" />
       </View>
-      
+
       {loading && !refreshing ? (
         <View className="flex-1 justify-center items-center">
           <ActivityIndicator size="large" color="#0F172A" />
@@ -301,7 +280,7 @@ export default function RestaurantDeviceMap() {
       ) : error ? (
         <View className="flex-1 justify-center items-center p-4">
           <Text className="text-red-500 text-lg">{error}</Text>
-          <TouchableOpacity 
+          <TouchableOpacity
             className="mt-4 bg-blue-500 px-4 py-2 rounded-lg"
             onPress={() => router.back()}
           >
@@ -327,17 +306,17 @@ export default function RestaurantDeviceMap() {
               ) : null}
             </View>
           </View>
-          
+
           {/* Summary Dashboard */}
           <View className="p-4 bg-white border-b border-gray-200">
             <Text className="text-lg font-bold mb-3 text-gray-800">Device Overview</Text>
-            
+
             <View className="flex-row justify-between mb-4">
               <View className="bg-blue-50 rounded-lg p-3 flex-1 mr-2">
                 <Text className="text-sm text-gray-500 mb-1">Total Devices</Text>
                 <Text className="text-2xl font-bold text-blue-700">{stats.totalDevices}</Text>
               </View>
-              
+
               <View className="bg-green-50 rounded-lg p-3 flex-1">
                 <View className="flex-row items-center justify-between">
                   <Text className="text-sm text-gray-500">Operational</Text>
@@ -346,7 +325,7 @@ export default function RestaurantDeviceMap() {
                 <Text className="text-xl font-bold text-green-700">{stats.operational}</Text>
               </View>
             </View>
-            
+
             <View className="flex-row justify-between">
               <View className="bg-yellow-50 rounded-lg p-3 flex-1 mr-2">
                 <View className="flex-row items-center justify-between">
@@ -355,7 +334,7 @@ export default function RestaurantDeviceMap() {
                 </View>
                 <Text className="text-xl font-bold text-yellow-700">{stats.maintenance}</Text>
               </View>
-              
+
               <View className="bg-red-50 rounded-lg p-3 flex-1">
                 <View className="flex-row items-center justify-between">
                   <Text className="text-sm text-gray-500">Offline</Text>
@@ -365,78 +344,29 @@ export default function RestaurantDeviceMap() {
               </View>
             </View>
           </View>
-          
-          {/* Filter Tabs */}
-          <View className="flex-row bg-white border-b border-gray-200">
-            <TouchableOpacity 
-              className={`flex-1 py-3 ${filterTab === 'type' ? 'border-b-2 border-blue-500' : ''}`}
-              onPress={() => setFilterTab('type')}
-            >
-              <Text className={`text-center font-medium ${filterTab === 'type' ? 'text-blue-500' : 'text-gray-500'}`}>
-                Filter by Type
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              className={`flex-1 py-3 ${filterTab === 'category' ? 'border-b-2 border-blue-500' : ''}`}
-              onPress={() => setFilterTab('category')}
-            >
-              <Text className={`text-center font-medium ${filterTab === 'category' ? 'text-blue-500' : 'text-gray-500'}`}>
-                Filter by Category
-              </Text>
-            </TouchableOpacity>
-          </View>
-          
-          {/* Device Type Filters */}
-          {filterTab === 'type' && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} className="p-2 bg-white border-b border-gray-200">
-              <TouchableOpacity 
-                className={`px-4 py-2 rounded-full mr-2 ${selectedDeviceType === null ? 'bg-blue-500' : 'bg-gray-200'}`}
-                onPress={() => setSelectedDeviceType(null)}
-              >
-                <Text className={`${selectedDeviceType === null ? 'text-white' : 'text-gray-800'}`}>All Types</Text>
-              </TouchableOpacity>
-              
-              {getUniqueDeviceTypes().map(type => (
-                <TouchableOpacity 
-                  key={type}
-                  className={`flex-row items-center px-4 py-2 rounded-full mr-2 ${selectedDeviceType === type ? 'bg-blue-500' : 'bg-gray-200'}`}
-                  onPress={() => setSelectedDeviceType(type)}
-                >
-                  <View className="mr-2">
-                    {getDeviceIcon(type)}
-                  </View>
-                  <Text className={`${selectedDeviceType === type ? 'text-white' : 'text-gray-800'}`}>
-                    {type.charAt(0).toUpperCase() + type.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          )}
-          
+
           {/* Category Filters */}
-          {filterTab === 'category' && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} className="p-2 bg-white border-b border-gray-200">
-              <TouchableOpacity 
-                className={`px-4 py-2 rounded-full mr-2 ${selectedCategory === null ? 'bg-blue-500' : 'bg-gray-200'}`}
-                onPress={() => setSelectedCategory(null)}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} className="p-2 bg-white border-b border-gray-200">
+            <TouchableOpacity
+              className={`px-4 py-2 rounded-full mr-2 ${selectedCategory === null ? 'bg-blue-500' : 'bg-gray-200'}`}
+              onPress={() => setSelectedCategory(null)}
+            >
+              <Text className={`${selectedCategory === null ? 'text-white' : 'text-gray-800'}`}>All Categories</Text>
+            </TouchableOpacity>
+
+            {categories.map(category => (
+              <TouchableOpacity
+                key={category.id}
+                className={`px-4 py-2 rounded-full mr-2 ${selectedCategory === category.id ? 'bg-blue-500' : 'bg-gray-200'}`}
+                onPress={() => setSelectedCategory(category.id)}
               >
-                <Text className={`${selectedCategory === null ? 'text-white' : 'text-gray-800'}`}>All Categories</Text>
+                <Text className={`${selectedCategory === category.id ? 'text-white' : 'text-gray-800'}`}>
+                  {category.name}
+                </Text>
               </TouchableOpacity>
-              
-              {categories.map(category => (
-                <TouchableOpacity 
-                  key={category.id}
-                  className={`flex-row items-center px-4 py-2 rounded-full mr-2 ${selectedCategory === category.id ? 'bg-blue-500' : 'bg-gray-200'}`}
-                  onPress={() => setSelectedCategory(category.id)}
-                >
-                  <Text className={`${selectedCategory === category.id ? 'text-white' : 'text-gray-800'}`}>
-                    {category.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          )}
-          
+            ))}
+          </ScrollView>
+
           <FlatList
             data={filteredRestaurants}
             keyExtractor={(item) => item.id}
@@ -446,8 +376,7 @@ export default function RestaurantDeviceMap() {
             }
             ListHeaderComponent={
               <Text className="text-lg font-bold mb-4">
-                Restaurants ({filteredRestaurants.length}) 
-                {selectedDeviceType && ` • Type: ${selectedDeviceType}`}
+                Restaurants ({filteredRestaurants.length})
                 {selectedCategory && ` • Category: ${categories.find(c => c.id === selectedCategory)?.name || ''}`}
                 {searchQuery && ` • Search: "${searchQuery}"`}
               </Text>
@@ -455,24 +384,24 @@ export default function RestaurantDeviceMap() {
             ListEmptyComponent={
               <View className="bg-white p-4 rounded-lg shadow-sm">
                 <Text className="text-gray-500 text-center">
-                  {searchQuery 
-                    ? "No restaurants or devices match your search" 
+                  {searchQuery
+                    ? "No restaurants or devices match your search"
                     : "No restaurants found"}
                 </Text>
               </View>
             }
             renderItem={({ item: restaurant }) => {
-              const filteredDevices = filterDevicesByTypeAndCategory(restaurant.devices);
+              const filteredDevices = filterDevicesByCategory(restaurant.devices);
               const deviceCount = filteredDevices.length;
-              
+
               // Skip restaurants with no matching devices
-              if (deviceCount === 0 && (selectedDeviceType || selectedCategory)) {
+              if (deviceCount === 0 && selectedCategory) {
                 return null;
               }
-              
+
               return (
                 <View className="bg-white p-4 rounded-lg shadow-sm mb-4">
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     className="flex-row justify-between items-center"
                     onPress={() => toggleRestaurantExpansion(restaurant.id)}
                   >
@@ -480,7 +409,6 @@ export default function RestaurantDeviceMap() {
                       <Text className="font-bold text-lg">{restaurant.name}</Text>
                       <Text className="text-gray-500">
                         {deviceCount} {deviceCount === 1 ? 'device' : 'devices'}
-                        {selectedDeviceType && ` (${selectedDeviceType})`}
                         {selectedCategory && ` (${categories.find(c => c.id === selectedCategory)?.name || ''})`}
                       </Text>
                     </View>
@@ -488,19 +416,19 @@ export default function RestaurantDeviceMap() {
                       <Text className="text-gray-700 font-medium">{deviceCount}</Text>
                     </View>
                   </TouchableOpacity>
-                  
+
                   {restaurant.address && (
                     <View className="flex-row items-center mt-2">
                       <MapPin size={16} color="#6B7280" />
                       <Text className="ml-2 text-gray-600">{restaurant.address}</Text>
                     </View>
                   )}
-                  
+
                   {expandedRestaurant === restaurant.id && deviceCount > 0 && (
                     <View className="mt-4 border-t border-gray-100 pt-4">
                       <Text className="font-medium text-gray-700 mb-2">Devices:</Text>
                       {filteredDevices.map(device => (
-                        <TouchableOpacity 
+                        <TouchableOpacity
                           key={device.id}
                           className="flex-row justify-between items-center p-3 bg-gray-50 rounded-lg mb-2"
                           onPress={() => router.push(`/devices/${device.id}`)}
@@ -531,7 +459,7 @@ export default function RestaurantDeviceMap() {
                       ))}
                     </View>
                   )}
-                  
+
                   {expandedRestaurant === restaurant.id && deviceCount === 0 && (
                     <View className="mt-4 border-t border-gray-100 pt-4">
                       <Text className="text-gray-500 text-center">No devices found</Text>
@@ -545,4 +473,4 @@ export default function RestaurantDeviceMap() {
       )}
     </SafeAreaView>
   );
-} 
+}

@@ -29,6 +29,7 @@ import {
   Settings,
   Trash2,
   CircleDot,
+  ArrowRightLeft,
 } from "lucide-react-native";
 import { supabase } from "../../../lib/supabase";
 import { formatDistanceToNow, format } from "date-fns";
@@ -543,6 +544,14 @@ Location: ${device.restaurant?.name || "Unassigned"}`;
             >
               <Settings size={20} color="#FFFFFF" />
               <Text className="text-white font-medium ml-3">Maintenance History</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              className="bg-orange-500 rounded-lg p-4 flex-row items-center justify-center md:justify-start"
+              onPress={() => router.push(`/devices/transfer/${device.id}`)}
+            >
+              <ArrowRightLeft size={20} color="#FFFFFF" />
+              <Text className="text-white font-medium ml-3">Transfer Device</Text>
             </TouchableOpacity>
 
             <TouchableOpacity

@@ -29,6 +29,7 @@ interface Ticket {
   restaurantName: string;
   deviceAffected: string;
   assignedTo: string | null;
+  createdBy: string | null;
   status: Status;
   createdAt: string;
 }
@@ -47,6 +48,22 @@ const TicketList = ({ onTicketPress = () => {} }: TicketListProps) => {
 
   useEffect(() => {
     fetchTickets();
+
+    // Set up real-time subscription for tickets
+    const ticketsSubscription = supabase
+      .channel('ticket-list-changes')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'tickets' },
+        () => {
+          // Refresh tickets when any ticket changes
+          fetchTickets();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(ticketsSubscription);
+    };
   }, []);
 
   const fetchTickets = async () => {
@@ -56,7 +73,8 @@ const TicketList = ({ onTicketPress = () => {} }: TicketListProps) => {
           *,
           restaurants:restaurant_id(name),
           devices:device_id(name),
-          users:assigned_to(name)
+          assigned_user:users!assigned_to(name),
+          created_by_user:users!created_by(name, email)
         `);
 
       if (error) throw error;
@@ -69,7 +87,8 @@ const TicketList = ({ onTicketPress = () => {} }: TicketListProps) => {
           priority: ticket.priority,
           restaurantName: ticket.restaurants?.name || "Unknown Restaurant",
           deviceAffected: ticket.devices?.name || "Unknown Device",
-          assignedTo: ticket.users?.name || null,
+          assignedTo: ticket.assigned_user?.name || null,
+          createdBy: ticket.created_by_user?.name || ticket.created_by_user?.email || null,
           status: ticket.status,
           createdAt: ticket.created_at,
         }));
@@ -156,13 +175,23 @@ const TicketList = ({ onTicketPress = () => {} }: TicketListProps) => {
             </Text>
           </View>
 
-          <View className="flex-row items-center">
+          <View className="flex-row items-center justify-between">
             <View className="bg-blue-50 rounded-xl px-3 py-2 flex-row items-center">
               {getStatusIcon(item.status)}
               <Text className="ml-2 text-sm text-blue-700 font-medium capitalize">
                 {item.status}
               </Text>
             </View>
+
+            {/* Creator Information */}
+            {item.createdBy && (
+              <View className="flex-row items-center">
+                <User size={12} color="#6b7280" />
+                <Text className="text-gray-500 text-xs ml-1">
+                  {item.createdBy}
+                </Text>
+              </View>
+            )}
           </View>
         </View>
 

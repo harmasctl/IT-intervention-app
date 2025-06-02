@@ -25,7 +25,7 @@ export default function HelpdeskCreateTicketScreen() {
         restaurant_id: ticketData.restaurant?.id,
         created_by: user?.id,
         assigned_to: null, // Will be assigned by manager or self-assigned by technician
-        
+
         // Enhanced helpdesk fields
         diagnostic_info: `
 🎫 JIRA Ticket: ${ticketData.jiraTicketId || 'N/A'}
@@ -35,15 +35,6 @@ ${ticketData.customerReport}
 
 🔍 Problem Description:
 ${ticketData.problemDescription}
-
-🩺 Initial Diagnosis:
-${ticketData.initialDiagnosis}
-
-🔧 Remote Steps Attempted:
-${ticketData.remoteStepsAttempted}
-
-💼 Business Impact:
-${ticketData.businessImpact}
 
 ⏱️ Field Work Details:
 • On-site Required: ${ticketData.requiresOnSite ? 'Yes' : 'No'}
@@ -58,17 +49,18 @@ ${ticketData.businessImpact}
 🚪 Access Instructions:
 ${ticketData.accessInstructions}
 
+🔧 Equipment & Intervention Planning:
+• Intervention Type: ${ticketData.interventionType}
+• Required Equipment: ${ticketData.requiredEquipment.length > 0 ? ticketData.requiredEquipment.join(', ') : 'None specified'}
+
 📝 Additional Technical Details:
 ${ticketData.diagnosticInfo}
         `.trim(),
-        
+
         // Additional metadata
         jira_ticket_id: ticketData.jiraTicketId,
         customer_report: ticketData.customerReport,
         problem_description: ticketData.problemDescription,
-        initial_diagnosis: ticketData.initialDiagnosis,
-        remote_steps_attempted: ticketData.remoteStepsAttempted,
-        business_impact: ticketData.businessImpact,
         requires_onsite: ticketData.requiresOnSite,
         estimated_duration: ticketData.estimatedDuration,
         urgency_level: ticketData.urgencyLevel,
@@ -76,10 +68,13 @@ ${ticketData.diagnosticInfo}
         contact_person: ticketData.contactPerson,
         contact_phone: ticketData.contactPhone,
         access_instructions: ticketData.accessInstructions,
-        
-        // Set SLA due date based on priority
-        sla_due_at: calculateSLADueDate(ticketData.priority, ticketData.urgencyLevel),
-        
+
+        // Equipment & Intervention Planning
+        required_equipment: ticketData.requiredEquipment,
+        intervention_type: ticketData.interventionType,
+
+
+
         created_at: new Date().toISOString(),
       };
 
@@ -124,7 +119,7 @@ ${ticketData.diagnosticInfo}
         .from("ticket_history")
         .insert({
           ticket_id: ticket.id,
-          status: "new",
+          status: "open",
           timestamp: new Date().toISOString(),
           notes: `Ticket created by helpdesk. ${ticketData.jiraTicketId ? `JIRA: ${ticketData.jiraTicketId}` : ''}`,
           user_id: user?.id,
@@ -182,24 +177,7 @@ ${ticketData.diagnosticInfo}
     }
   };
 
-  const calculateSLADueDate = (priority: string, urgencyLevel: string) => {
-    const now = new Date();
-    let hoursToAdd = 24; // Default 24 hours
 
-    // Adjust based on priority and urgency
-    if (priority === "critical" || urgencyLevel === "critical") {
-      hoursToAdd = 2; // 2 hours for critical
-    } else if (priority === "high" || urgencyLevel === "high") {
-      hoursToAdd = 4; // 4 hours for high
-    } else if (priority === "medium" || urgencyLevel === "normal") {
-      hoursToAdd = 8; // 8 hours for medium/normal
-    } else {
-      hoursToAdd = 24; // 24 hours for low
-    }
-
-    const dueDate = new Date(now.getTime() + hoursToAdd * 60 * 60 * 1000);
-    return dueDate.toISOString();
-  };
 
   const handleCancel = () => {
     Alert.alert(

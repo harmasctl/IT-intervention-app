@@ -3,183 +3,436 @@ import {
   View,
   Text,
   TouchableOpacity,
-  FlatList,
-  ActivityIndicator,
-  Alert,
   Modal,
+  ScrollView,
+  TextInput,
+  Alert,
+  ActivityIndicator,
 } from "react-native";
+import {
+  User,
+  Clock,
+  X,
+  Check,
+  UserPlus,
+  History,
+} from "lucide-react-native";
 import { supabase } from "../lib/supabase";
-import { User, CheckCircle, Clock } from "lucide-react-native";
 import { useAuth } from "./AuthProvider";
 
-type Technician = {
+interface User {
   id: string;
   name: string;
   email: string;
   role: string;
-  avatar_url?: string;
-  specialization?: string;
-  current_workload?: number;
-};
+}
 
-type TicketAssignmentProps = {
+interface Assignment {
+  id: string;
+  assigned_to: string;
+  assigned_by: string;
+  assigned_at: string;
+  notes: string;
+  assigned_to_user: User;
+  assigned_by_user: User;
+}
+
+interface TicketAssignmentProps {
   ticketId: string;
-  currentAssigneeId?: string | null;
-  onAssign: (technicianId: string, technicianName: string) => void;
-  onClose: () => void;
-};
+  currentAssignedTo?: string;
+  onAssignmentChange?: () => void;
+}
 
 export default function TicketAssignment({
   ticketId,
-  currentAssigneeId,
-  onAssign,
-  onClose,
+  currentAssignedTo,
+  onAssignmentChange,
 }: TicketAssignmentProps) {
-  const [technicians, setTechnicians] = useState<Technician[]>([]);
-  const [loading, setLoading] = useState(true);
   const { user } = useAuth();
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [users, setUsers] = useState<User[]>([]);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [selectedUser, setSelectedUser] = useState<string>("");
+  const [notes, setNotes] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [assignedUser, setAssignedUser] = useState<User | null>(null);
 
   useEffect(() => {
-    fetchTechnicians();
-  }, []);
+    if (showAssignModal) {
+      fetchUsers();
+    }
+  }, [showAssignModal]);
 
-  const fetchTechnicians = async () => {
+  useEffect(() => {
+    if (showHistoryModal) {
+      fetchAssignmentHistory();
+    }
+  }, [showHistoryModal]);
+
+  useEffect(() => {
+    if (currentAssignedTo) {
+      fetchAssignedUser();
+    } else {
+      setAssignedUser(null);
+    }
+  }, [currentAssignedTo]);
+
+  const fetchUsers = async () => {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("role", "technician");
+        .from("users")
+        .select("id, name, email, role")
+        .order("name");
 
       if (error) throw error;
-
-      if (data) {
-        // Transform data to match Technician type
-        const techData = data.map((tech) => ({
-          id: tech.id,
-          name: tech.full_name || tech.email.split("@")[0],
-          email: tech.email,
-          role: tech.role,
-          avatar_url: tech.avatar_url,
-          specialization: tech.specialization,
-          current_workload: tech.current_workload || 0,
-        }));
-        setTechnicians(techData);
-      }
+      setUsers(data || []);
     } catch (error) {
-      console.error("Error fetching technicians:", error);
-      Alert.alert("Error", "Failed to load technicians");
+      console.error("Error fetching users:", error);
+      Alert.alert("Error", "Failed to load users");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSelfAssign = async () => {
-    if (!user) return;
+  const fetchAssignedUser = async () => {
+    if (!currentAssignedTo) return;
 
     try {
-      // Get user profile to get the name
-      const { data: profileData, error: profileError } = await supabase
-        .from("profiles")
-        .select("full_name")
-        .eq("id", user.id)
+      const { data, error } = await supabase
+        .from("users")
+        .select("id, name, email, role")
+        .eq("id", currentAssignedTo)
         .single();
 
-      if (profileError) throw profileError;
-
-      const technicianName =
-        profileData?.name || user.email?.split("@")[0] || "Current User";
-
-      onAssign(user.id, technicianName);
+      if (error) throw error;
+      setAssignedUser(data);
     } catch (error) {
-      console.error("Error self-assigning ticket:", error);
-      Alert.alert("Error", "Failed to assign ticket to yourself");
+      console.error("Error fetching assigned user:", error);
+      setAssignedUser(null);
     }
   };
 
-  const handleAssign = (technicianId: string, technicianName: string) => {
-    onAssign(technicianId, technicianName);
+  const fetchAssignmentHistory = async () => {
+    try {
+      setLoadingHistory(true);
+      const { data, error } = await supabase
+        .from("ticket_assignments")
+        .select(`
+          *,
+          assigned_to_user:users!assigned_to(id, name, email, role),
+          assigned_by_user:users!assigned_by(id, name, email, role)
+        `)
+        .eq("ticket_id", ticketId)
+        .order("assigned_at", { ascending: false });
+
+      if (error) throw error;
+      setAssignments(data || []);
+    } catch (error) {
+      console.error("Error fetching assignment history:", error);
+      Alert.alert("Error", "Failed to load assignment history");
+    } finally {
+      setLoadingHistory(false);
+    }
   };
 
-  const renderTechnicianItem = ({ item }: { item: Technician }) => {
-    const isCurrentAssignee = item.id === currentAssigneeId;
+  const handleAssign = async () => {
+    if (!selectedUser) {
+      Alert.alert("Error", "Please select a user to assign");
+      return;
+    }
 
-    return (
-      <TouchableOpacity
-        className={`flex-row items-center p-4 border-b border-gray-100 ${isCurrentAssignee ? "bg-blue-50" : ""}`}
-        onPress={() => handleAssign(item.id, item.name)}
-      >
-        <View className="bg-blue-100 w-10 h-10 rounded-full items-center justify-center mr-3">
-          <User size={20} color="#1e40af" />
-        </View>
-        <View className="flex-1">
-          <Text className="font-bold text-gray-800">{item.name}</Text>
-          <Text className="text-gray-500 text-sm">{item.email}</Text>
-          {item.specialization && (
-            <Text className="text-gray-500 text-xs mt-1">
-              Specialization: {item.specialization}
-            </Text>
-          )}
-        </View>
-        <View className="items-end">
-          <View className="flex-row items-center">
-            <Clock size={14} color="#4b5563" />
-            <Text className="text-gray-500 text-sm ml-1">
-              {item.current_workload || 0} tickets
-            </Text>
-          </View>
-          {isCurrentAssignee && (
-            <View className="flex-row items-center mt-1">
-              <CheckCircle size={14} color="#16a34a" />
-              <Text className="text-green-600 text-xs ml-1">Current</Text>
-            </View>
-          )}
-        </View>
-      </TouchableOpacity>
-    );
+    try {
+      setLoading(true);
+
+      // Create assignment record
+      const { error: assignmentError } = await supabase
+        .from("ticket_assignments")
+        .insert({
+          ticket_id: ticketId,
+          assigned_to: selectedUser,
+          assigned_by: user?.id,
+          notes: notes.trim() || null,
+        });
+
+      if (assignmentError) throw assignmentError;
+
+      // Update ticket assigned_to field (status remains "open")
+      const { error: ticketError } = await supabase
+        .from("tickets")
+        .update({
+          assigned_to: selectedUser
+        })
+        .eq("id", ticketId);
+
+      if (ticketError) throw ticketError;
+
+      Alert.alert("Success", "Ticket assigned successfully");
+      setShowAssignModal(false);
+      setSelectedUser("");
+      setNotes("");
+
+      if (onAssignmentChange) {
+        onAssignmentChange();
+      }
+
+      // Refresh assigned user info
+      fetchAssignedUser();
+    } catch (error) {
+      console.error("Error assigning ticket:", error);
+      Alert.alert("Error", "Failed to assign ticket");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUnassign = async () => {
+    try {
+      setLoading(true);
+
+      // Create unassignment record
+      const { error: assignmentError } = await supabase
+        .from("ticket_assignments")
+        .insert({
+          ticket_id: ticketId,
+          assigned_to: null,
+          assigned_by: user?.id,
+          notes: "Ticket unassigned",
+        });
+
+      if (assignmentError) throw assignmentError;
+
+      // Update ticket
+      const { error: ticketError } = await supabase
+        .from("tickets")
+        .update({
+          assigned_to: null,
+          status: "new"
+        })
+        .eq("id", ticketId);
+
+      if (ticketError) throw ticketError;
+
+      Alert.alert("Success", "Ticket unassigned successfully");
+
+      if (onAssignmentChange) {
+        onAssignmentChange();
+      }
+
+      // Clear assigned user info
+      setAssignedUser(null);
+    } catch (error) {
+      console.error("Error unassigning ticket:", error);
+      Alert.alert("Error", "Failed to unassign ticket");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleString();
+  };
+
+  const getCurrentAssignedUser = () => {
+    return users.find(u => u.id === currentAssignedTo);
   };
 
   return (
-    <View className="flex-1 bg-white">
-      <View className="p-4 border-b border-gray-200">
-        <Text className="text-xl font-bold text-center text-blue-800">
-          Assign Ticket
-        </Text>
-        <TouchableOpacity className="absolute right-4 top-4" onPress={onClose}>
-          <Text className="text-blue-600 font-medium">Cancel</Text>
+    <View className="bg-white rounded-lg p-4 mb-4 shadow-sm border border-gray-200">
+      <Text className="text-lg font-bold text-gray-800 mb-3">Assignment</Text>
+
+      {currentAssignedTo ? (
+        <View className="bg-blue-50 rounded-lg p-3 mb-3">
+          <View className="flex-row items-center justify-between">
+            <View className="flex-row items-center flex-1">
+              <User size={20} color="#3b82f6" />
+              <View className="ml-2 flex-1">
+                <Text className="font-medium text-blue-900">
+                  {assignedUser?.name || "Loading..."}
+                </Text>
+                <Text className="text-blue-700 text-sm">
+                  {assignedUser?.role || ""}
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              onPress={handleUnassign}
+              className="bg-red-100 p-2 rounded-lg"
+              disabled={loading}
+            >
+              <X size={16} color="#dc2626" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : (
+        <View className="bg-gray-50 rounded-lg p-3 mb-3">
+          <Text className="text-gray-500 text-center">Not assigned</Text>
+        </View>
+      )}
+
+      <View className="flex-row space-x-2">
+        <TouchableOpacity
+          onPress={() => setShowAssignModal(true)}
+          className="flex-1 bg-blue-500 rounded-lg p-3 flex-row items-center justify-center"
+          disabled={loading}
+        >
+          <UserPlus size={16} color="#ffffff" />
+          <Text className="text-white font-medium ml-2">
+            {currentAssignedTo ? "Reassign" : "Assign"}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={() => setShowHistoryModal(true)}
+          className="bg-gray-500 rounded-lg p-3 flex-row items-center justify-center"
+        >
+          <History size={16} color="#ffffff" />
+          <Text className="text-white font-medium ml-2">History</Text>
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity
-        className="m-4 bg-blue-600 p-3 rounded-lg items-center"
-        onPress={handleSelfAssign}
+      {/* Assignment Modal */}
+      <Modal
+        visible={showAssignModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
       >
-        <Text className="text-white font-bold">Assign to Myself</Text>
-      </TouchableOpacity>
+        <View className="flex-1 bg-white">
+          <View className="flex-row items-center justify-between p-4 border-b border-gray-200">
+            <Text className="text-lg font-bold">Assign Ticket</Text>
+            <TouchableOpacity onPress={() => setShowAssignModal(false)}>
+              <X size={24} color="#6b7280" />
+            </TouchableOpacity>
+          </View>
 
-      <View className="px-4 py-2 bg-gray-100">
-        <Text className="font-medium text-gray-700">Available Technicians</Text>
-      </View>
+          <ScrollView className="flex-1 p-4">
+            <Text className="text-sm font-medium text-gray-700 mb-2">
+              Select User *
+            </Text>
 
-      {loading ? (
-        <View className="flex-1 justify-center items-center">
-          <ActivityIndicator size="large" color="#1e40af" />
-          <Text className="mt-2 text-gray-500">Loading technicians...</Text>
+            {loading ? (
+              <ActivityIndicator size="small" color="#3b82f6" />
+            ) : (
+              <ScrollView className="max-h-64 mb-4">
+                {users.map((user) => (
+                  <TouchableOpacity
+                    key={user.id}
+                    onPress={() => setSelectedUser(user.id)}
+                    className={`p-3 rounded-lg mb-2 border ${
+                      selectedUser === user.id
+                        ? "bg-blue-50 border-blue-300"
+                        : "bg-gray-50 border-gray-200"
+                    }`}
+                  >
+                    <View className="flex-row items-center justify-between">
+                      <View>
+                        <Text className="font-medium">{user.name}</Text>
+                        <Text className="text-gray-500 text-sm">{user.role}</Text>
+                        <Text className="text-gray-400 text-xs">{user.email}</Text>
+                      </View>
+                      {selectedUser === user.id && (
+                        <Check size={20} color="#3b82f6" />
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+
+            <Text className="text-sm font-medium text-gray-700 mb-2">
+              Notes (Optional)
+            </Text>
+            <TextInput
+              className="bg-gray-100 p-3 rounded-lg text-base mb-4"
+              placeholder="Add assignment notes..."
+              value={notes}
+              onChangeText={setNotes}
+              multiline
+              numberOfLines={3}
+            />
+
+            <TouchableOpacity
+              onPress={handleAssign}
+              className="bg-blue-500 rounded-lg p-4"
+              disabled={loading || !selectedUser}
+            >
+              {loading ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <Text className="text-white font-medium text-center">
+                  Assign Ticket
+                </Text>
+              )}
+            </TouchableOpacity>
+          </ScrollView>
         </View>
-      ) : technicians.length > 0 ? (
-        <FlatList
-          data={technicians}
-          renderItem={renderTechnicianItem}
-          keyExtractor={(item) => item.id}
-        />
-      ) : (
-        <View className="flex-1 justify-center items-center p-4">
-          <Text className="text-gray-500 text-center">
-            No technicians available. Add technicians to your team to enable
-            assignment.
-          </Text>
+      </Modal>
+
+      {/* Assignment History Modal */}
+      <Modal
+        visible={showHistoryModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+      >
+        <View className="flex-1 bg-white">
+          <View className="flex-row items-center justify-between p-4 border-b border-gray-200">
+            <Text className="text-lg font-bold">Assignment History</Text>
+            <TouchableOpacity onPress={() => setShowHistoryModal(false)}>
+              <X size={24} color="#6b7280" />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView className="flex-1 p-4">
+            {loadingHistory ? (
+              <View className="flex-1 justify-center items-center">
+                <ActivityIndicator size="large" color="#3b82f6" />
+                <Text className="text-gray-500 mt-2">Loading history...</Text>
+              </View>
+            ) : assignments.length === 0 ? (
+              <View className="flex-1 justify-center items-center">
+                <Text className="text-gray-500">No assignment history</Text>
+              </View>
+            ) : (
+              assignments.map((assignment) => (
+                <View
+                  key={assignment.id}
+                  className="bg-gray-50 rounded-lg p-4 mb-3"
+                >
+                  <View className="flex-row items-center mb-2">
+                    <Clock size={16} color="#6b7280" />
+                    <Text className="text-gray-600 text-sm ml-2">
+                      {formatDate(assignment.assigned_at)}
+                    </Text>
+                  </View>
+
+                  <View className="flex-row items-center mb-2">
+                    <User size={16} color="#3b82f6" />
+                    <Text className="text-gray-800 ml-2">
+                      {assignment.assigned_to_user
+                        ? `Assigned to ${assignment.assigned_to_user.name}`
+                        : "Unassigned"}
+                    </Text>
+                  </View>
+
+                  <Text className="text-gray-600 text-sm">
+                    By: {assignment.assigned_by_user?.name || "System"}
+                  </Text>
+
+                  {assignment.notes && (
+                    <View className="mt-2 p-2 bg-white rounded border-l-4 border-blue-300">
+                      <Text className="text-gray-700 text-sm">
+                        {assignment.notes}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              ))
+            )}
+          </ScrollView>
         </View>
-      )}
+      </Modal>
     </View>
   );
 }

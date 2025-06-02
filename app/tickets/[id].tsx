@@ -28,6 +28,8 @@ import {
   X,
   History,
   Send,
+  UserCheck,
+  UserX,
 } from "lucide-react-native";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../components/AuthProvider";
@@ -35,6 +37,7 @@ import TicketStatusWorkflow from "../../components/TicketStatusWorkflow";
 import TicketAssignment from "../../components/TicketAssignment";
 import { useOffline } from "../../components/OfflineManager";
 import { Image } from "expo-image";
+import { formatDistanceToNow } from "date-fns";
 import ImageGallery from "../../components/ImageGallery";
 import * as Haptics from "expo-haptics";
 
@@ -45,7 +48,6 @@ export default function TicketDetailScreen() {
   const { isOnline, saveOfflineAction } = useOffline();
   const [ticket, setTicket] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [showAssignModal, setShowAssignModal] = useState(false);
   const [isAssignee, setIsAssignee] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [ticketHistory, setTicketHistory] = useState<any[]>([]);
@@ -77,7 +79,13 @@ export default function TicketDetailScreen() {
       setLoading(true);
       const { data, error } = await supabase
         .from("tickets")
-        .select("*, devices(*), restaurants(*)")
+        .select(`
+          *,
+          devices(*),
+          restaurants(*),
+          created_by_user:users!created_by(id, name, email),
+          assigned_to_user:users!assigned_to(id, name, email)
+        `)
         .eq("id", id)
         .single();
 
@@ -99,7 +107,10 @@ export default function TicketDetailScreen() {
       setLoadingHistory(true);
       const { data, error } = await supabase
         .from("ticket_history")
-        .select("*, users:user_id(name, email)")
+        .select(`
+          *,
+          user:users(name, email)
+        `)
         .eq("ticket_id", id)
         .order("timestamp", { ascending: false });
 
@@ -138,72 +149,7 @@ export default function TicketDetailScreen() {
     }
   };
 
-  const handleAssign = async (technicianId: string, technicianName: string) => {
-    try {
-      const now = new Date().toISOString();
-      const updates = {
-        assignee_id: technicianId,
-        assignee_name: technicianName,
-        assigned_at: now,
-        status: "assigned",
-        updated_at: now,
-      };
 
-      if (isOnline) {
-        const { error } = await supabase
-          .from("tickets")
-          .update(updates)
-          .eq("id", id);
-
-        if (error) throw error;
-
-        // Record in ticket history
-        await supabase.from("ticket_history").insert([
-          {
-            ticket_id: id,
-            status: "assigned",
-            timestamp: now,
-            notes: `Assigned to ${technicianName}`,
-            user_id: user?.id,
-          },
-        ]);
-
-        // Create notification
-        await supabase.from("notifications").insert([
-          {
-            title: "Ticket Assigned",
-            message: `Ticket #${id} has been assigned to ${technicianName}`,
-            type: "info",
-            related_id: id,
-            related_type: "ticket",
-            is_read: false,
-            created_at: now,
-          },
-        ]);
-      } else {
-        // Save for offline sync
-        await saveOfflineAction("tickets", "update", { id, ...updates });
-        await saveOfflineAction("ticket_history", "insert", {
-          ticket_id: id,
-          status: "assigned",
-          timestamp: now,
-          notes: `Assigned to ${technicianName}`,
-          user_id: user?.id,
-        });
-      }
-
-      // Update local state
-      setTicket({
-        ...ticket,
-        ...updates,
-      });
-
-      setShowAssignModal(false);
-    } catch (error) {
-      console.error("Error assigning ticket:", error);
-      Alert.alert("Error", "Failed to assign ticket");
-    }
-  };
 
   const handleStatusChange = (newStatus: string) => {
     // Update local state immediately for better UX
@@ -216,8 +162,10 @@ export default function TicketDetailScreen() {
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
-      case "high":
+      case "critical":
         return "bg-red-100 text-red-800";
+      case "high":
+        return "bg-orange-100 text-orange-800";
       case "medium":
         return "bg-amber-100 text-amber-800";
       case "low":
@@ -252,8 +200,8 @@ export default function TicketDetailScreen() {
     }
 
     return ticketHistory.map((item, index) => (
-      <View 
-        key={item.id} 
+      <View
+        key={item.id}
         className={`p-3 ${index < ticketHistory.length - 1 ? 'border-b border-gray-100' : ''}`}
       >
         <View className="flex-row justify-between items-start">
@@ -266,9 +214,9 @@ export default function TicketDetailScreen() {
         {item.notes && (
           <Text className="text-gray-700 mt-1">{item.notes}</Text>
         )}
-        {item.users && (
+        {item.user && (
           <Text className="text-xs text-gray-500 mt-1">
-            By {item.users.name || item.users.email || 'Unknown user'}
+            By {item.user.name || item.user.email || 'Unknown user'}
           </Text>
         )}
       </View>
@@ -311,7 +259,7 @@ export default function TicketDetailScreen() {
     try {
       setSendingComment(true);
       const now = new Date().toISOString();
-      
+
       const { data, error } = await supabase
         .from("ticket_comments")
         .insert({
@@ -333,10 +281,10 @@ export default function TicketDetailScreen() {
             email: user.email
           }
         };
-        
+
         setTicketComments([...ticketComments, newCommentWithUser]);
         setNewComment("");
-        
+
         // Create notification for assignee if the comment is not from them
         if (ticket.assignee_id && ticket.assignee_id !== user.id) {
           await supabase.from("notifications").insert([
@@ -382,11 +330,11 @@ export default function TicketDetailScreen() {
     return (
       <View>
         {ticketComments.map((comment) => (
-          <View 
-            key={comment.id} 
+          <View
+            key={comment.id}
             className={`p-4 mb-3 rounded-lg ${
-              comment.user_id === user?.id 
-                ? "bg-blue-50 ml-10" 
+              comment.user_id === user?.id
+                ? "bg-blue-50 ml-10"
                 : "bg-gray-50 mr-10"
             }`}
           >
@@ -456,9 +404,57 @@ export default function TicketDetailScreen() {
       </View>
 
       <ScrollView className="flex-1 p-4">
+        {/* Ticket Information */}
+        <View className="bg-white rounded-xl p-4 mb-4 shadow-sm border border-gray-100">
+          <Text className="text-lg font-bold text-gray-800 mb-4">Ticket Information</Text>
+
+          {/* Creator Information */}
+          {ticket.created_by_user && (
+            <View className="flex-row items-center mb-3 pb-3 border-b border-gray-100">
+              <View className="bg-blue-100 p-2 rounded-full mr-3">
+                <User size={16} color="#3B82F6" />
+              </View>
+              <View className="flex-1">
+                <Text className="text-gray-600 text-sm">Created by</Text>
+                <Text className="text-gray-800 font-medium">
+                  {ticket.created_by_user.name || ticket.created_by_user.email}
+                </Text>
+              </View>
+              <Text className="text-gray-500 text-xs">
+                {formatDistanceToNow(new Date(ticket.created_at), { addSuffix: true })}
+              </Text>
+            </View>
+          )}
+
+          {/* Assignee Information */}
+          {ticket.assigned_to_user ? (
+            <View className="flex-row items-center mb-3">
+              <View className="bg-green-100 p-2 rounded-full mr-3">
+                <UserCheck size={16} color="#10B981" />
+              </View>
+              <View className="flex-1">
+                <Text className="text-gray-600 text-sm">Assigned to</Text>
+                <Text className="text-gray-800 font-medium">
+                  {ticket.assigned_to_user.name || ticket.assigned_to_user.email}
+                </Text>
+              </View>
+            </View>
+          ) : (
+            <View className="flex-row items-center mb-3">
+              <View className="bg-gray-100 p-2 rounded-full mr-3">
+                <UserX size={16} color="#6B7280" />
+              </View>
+              <View className="flex-1">
+                <Text className="text-gray-600 text-sm">Assignment status</Text>
+                <Text className="text-gray-500 font-medium">Unassigned</Text>
+              </View>
+            </View>
+          )}
+        </View>
+
         {/* Diagnostic Information */}
-        <View className="mt-4 p-4 bg-gray-50 rounded-lg">
-          <View className="flex-row items-center mb-2">
+        <View className="bg-white rounded-xl p-4 mb-4 shadow-sm border border-gray-100">
+          <View className="flex-row items-center mb-3">
             <FileText size={18} color="#1e40af" />
             <Text className="ml-2 text-gray-800 font-bold">Diagnostic Information</Text>
           </View>
@@ -484,36 +480,11 @@ export default function TicketDetailScreen() {
           </View>
         </View>
 
-        <View className="mb-4">
-          <Text className="text-gray-700 font-medium mb-2">Assigned To</Text>
-          {ticket.assignee_name ? (
-            <View className="flex-row items-center">
-              <View className="bg-blue-100 w-8 h-8 rounded-full items-center justify-center mr-2">
-                <User size={16} color="#1e40af" />
-              </View>
-              <View>
-                <Text className="font-medium text-gray-800">
-                  {ticket.assignee_name}
-                </Text>
-                <Text className="text-gray-500 text-xs">
-                  Assigned {formatDate(ticket.assigned_at)}
-                </Text>
-              </View>
-            </View>
-          ) : (
-            <View className="flex-row items-center">
-              <TouchableOpacity
-                className="bg-blue-600 px-3 py-1.5 rounded-lg flex-row items-center"
-                onPress={() => setShowAssignModal(true)}
-              >
-                <User size={16} color="white" />
-                <Text className="text-white font-medium ml-1">
-                  Assign Ticket
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
+        <TicketAssignment
+          ticketId={ticket.id}
+          currentAssignedTo={ticket.assigned_to}
+          onAssignmentChange={fetchTicketDetails}
+        />
 
         <View className="mb-4">
           <Text className="text-gray-700 font-medium mb-2">Device</Text>
@@ -527,8 +498,7 @@ export default function TicketDetailScreen() {
                   {ticket.devices.name}
                 </Text>
                 <Text className="text-gray-500 text-sm">
-                  {ticket.devices.type} •{" "}
-                  {ticket.devices.model || "Unknown model"}
+                  {ticket.devices.type} • {ticket.devices.model || "Unknown model"}
                 </Text>
                 {ticket.devices.serial_number && (
                   <Text className="text-gray-500 text-xs">
@@ -678,15 +648,7 @@ export default function TicketDetailScreen() {
           </View>
         )}
 
-        {ticket.sla_due_at && (
-          <View className="mb-4">
-            <Text className="text-gray-700 font-medium mb-2">SLA Due</Text>
-            <View className="bg-gray-50 p-3 rounded-lg flex-row items-center">
-              <Clock size={16} color="#1e40af" className="mr-2" />
-              <Text className="text-gray-800">{formatDate(ticket.sla_due_at)}</Text>
-            </View>
-          </View>
-        )}
+
 
         {/* Comments Section */}
         <View className="mt-4 bg-white rounded-lg">
@@ -694,10 +656,10 @@ export default function TicketDetailScreen() {
             <MessageSquare size={18} color="#1e40af" />
             <Text className="ml-2 text-gray-800 font-bold">Comments</Text>
           </View>
-          
+
           <View className="p-3 bg-white rounded-b-lg">
             {renderTicketComments()}
-            
+
             <View className="flex-row items-center mt-4 border border-gray-200 rounded-lg">
               <TextInput
                 className="flex-1 p-3"
@@ -724,7 +686,7 @@ export default function TicketDetailScreen() {
 
         {/* Ticket History Section */}
         <View className="mt-4 bg-white rounded-lg">
-          <TouchableOpacity 
+          <TouchableOpacity
             className="flex-row justify-between items-center p-3 bg-gray-50 rounded-lg"
             onPress={() => setShowHistory(!showHistory)}
           >
@@ -734,7 +696,7 @@ export default function TicketDetailScreen() {
             </View>
             <Text className="text-blue-600">{showHistory ? 'Hide' : 'Show'}</Text>
           </TouchableOpacity>
-          
+
           {showHistory && (
             <View className="bg-white rounded-lg mt-2 border border-gray-100">
               {renderTicketHistory()}
@@ -753,19 +715,7 @@ export default function TicketDetailScreen() {
         />
       )}
 
-      {/* Assignment Modal */}
-      <Modal
-        visible={showAssignModal}
-        animationType="slide"
-        onRequestClose={() => setShowAssignModal(false)}
-      >
-        <TicketAssignment
-          ticketId={ticket.id}
-          currentAssigneeId={ticket.assignee_id}
-          onAssign={handleAssign}
-          onClose={() => setShowAssignModal(false)}
-        />
-      </Modal>
+
     </SafeAreaView>
   );
 }
