@@ -1,10 +1,13 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
   TouchableOpacity,
   FlatList,
   ActivityIndicator,
+  Alert,
+  Switch,
+  ScrollView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
@@ -17,8 +20,15 @@ import {
   Info,
   Package,
   Clock,
+  Settings,
+  Wrench,
+  BellOff,
+  X,
+  RefreshCw,
+  Calendar,
 } from "lucide-react-native";
 import { useNotifications } from "../_layout";
+import { supabase } from "../../lib/supabase";
 
 export default function NotificationsScreen() {
   const router = useRouter();
@@ -30,9 +40,123 @@ export default function NotificationsScreen() {
     refreshNotifications,
   } = useNotifications();
 
+  const [showSettings, setShowSettings] = useState(false);
+  const [maintenanceReminders, setMaintenanceReminders] = useState(true);
+  const [deviceAlerts, setDeviceAlerts] = useState(true);
+  const [emailNotifications, setEmailNotifications] = useState(false);
+  const [loading, setLoading] = useState(false);
+
   useEffect(() => {
     refreshNotifications();
+    checkMaintenanceReminders();
+    loadSettings();
   }, []);
+
+  const loadSettings = async () => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const settings = localStorage.getItem('notification_settings');
+        if (settings) {
+          const parsed = JSON.parse(settings);
+          setMaintenanceReminders(parsed.maintenanceReminders ?? true);
+          setDeviceAlerts(parsed.deviceAlerts ?? true);
+          setEmailNotifications(parsed.emailNotifications ?? false);
+        }
+      }
+    } catch (error) {
+      console.error("Error loading notification settings:", error);
+    }
+  };
+
+  const saveSettings = async () => {
+    try {
+      const settings = {
+        maintenanceReminders,
+        deviceAlerts,
+        emailNotifications,
+      };
+      if (typeof window !== 'undefined' && window.localStorage) {
+        localStorage.setItem('notification_settings', JSON.stringify(settings));
+      }
+      Alert.alert("💾 Settings Saved", "Notification preferences have been updated");
+    } catch (error) {
+      console.error("Error saving notification settings:", error);
+      Alert.alert("❌ Error", "Failed to save settings");
+    }
+  };
+
+  const checkMaintenanceReminders = async () => {
+    if (!maintenanceReminders) return;
+
+    try {
+      setLoading(true);
+
+      // Check for upcoming maintenance (next 7 days)
+      const nextWeek = new Date();
+      nextWeek.setDate(nextWeek.getDate() + 7);
+
+      const { data: upcomingMaintenance, error } = await supabase
+        .from("maintenance_records")
+        .select(`
+          *,
+          device:devices(name, serial_number)
+        `)
+        .eq("status", "pending")
+        .lte("date", nextWeek.toISOString())
+        .gte("date", new Date().toISOString());
+
+      if (error) {
+        console.error("Error checking maintenance:", error);
+        return;
+      }
+
+      // Check for overdue maintenance
+      const { data: overdueMaintenance } = await supabase
+        .from("maintenance_records")
+        .select(`
+          *,
+          device:devices(name, serial_number)
+        `)
+        .eq("status", "pending")
+        .lt("date", new Date().toISOString());
+
+      let reminderCount = 0;
+
+      // Create notifications for upcoming maintenance
+      for (const maintenance of upcomingMaintenance || []) {
+        reminderCount++;
+      }
+
+      // Create notifications for overdue maintenance
+      for (const maintenance of overdueMaintenance || []) {
+        reminderCount++;
+      }
+
+      if (reminderCount > 0) {
+        Alert.alert(
+          "🔔 Maintenance Reminders",
+          `Found ${reminderCount} maintenance task(s) requiring attention`,
+          [
+            {
+              text: "View Maintenance",
+              onPress: () => router.push("/devices/maintenance/history")
+            },
+            {
+              text: "OK",
+              style: "cancel"
+            }
+          ]
+        );
+      } else {
+        Alert.alert("✅ All Up to Date", "No pending maintenance reminders");
+      }
+    } catch (error) {
+      console.error("Error checking maintenance reminders:", error);
+      Alert.alert("❌ Error", "Failed to check maintenance reminders");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
@@ -44,6 +168,14 @@ export default function NotificationsScreen() {
         return <AlertTriangle size={20} color="#ef4444" />;
       case "low_stock":
         return <Package size={20} color="#f59e0b" />;
+      case "maintenance_due":
+        return <Wrench size={20} color="#f59e0b" />;
+      case "maintenance_overdue":
+        return <AlertTriangle size={20} color="#ef4444" />;
+      case "device_offline":
+        return <Package size={20} color="#6b7280" />;
+      case "system_alert":
+        return <Bell size={20} color="#3b82f6" />;
       default:
         return <Info size={20} color="#3b82f6" />;
     }
@@ -116,20 +248,102 @@ export default function NotificationsScreen() {
 
       {/* Header */}
       <View className="flex-row justify-between items-center px-4 py-3 border-b border-gray-200">
-        <TouchableOpacity
-          onPress={() => router.back()}
-          className="flex-row items-center"
-        >
-          <ArrowLeft size={20} color="#3b82f6" />
-          <Text className="text-blue-500 ml-1">Back</Text>
-        </TouchableOpacity>
-        <Text className="text-xl font-bold text-blue-800">Notifications</Text>
-        {unreadCount > 0 && (
-          <TouchableOpacity onPress={markAllAsRead}>
-            <Text className="text-blue-600 font-medium">Mark all read</Text>
+        <View className="flex-row items-center flex-1">
+          <TouchableOpacity onPress={() => router.back()} className="mr-3">
+            <ArrowLeft size={24} color="#0F172A" />
           </TouchableOpacity>
-        )}
+          <Text className="text-xl font-bold text-blue-800 flex-1">Notifications</Text>
+          {unreadCount > 0 && (
+            <View className="bg-red-500 rounded-full px-2 py-1 mr-3">
+              <Text className="text-white text-xs font-bold">{unreadCount}</Text>
+            </View>
+          )}
+        </View>
+        <View className="flex-row">
+          <TouchableOpacity
+            className="bg-gray-100 p-2 rounded-lg mr-2"
+            onPress={() => setShowSettings(!showSettings)}
+          >
+            <Settings size={20} color="#4B5563" />
+          </TouchableOpacity>
+          {unreadCount > 0 && (
+            <TouchableOpacity
+              className="bg-blue-500 px-3 py-2 rounded-lg"
+              onPress={markAllAsRead}
+            >
+              <Text className="text-white font-medium">Read All</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
+
+      {/* Action Buttons */}
+      <View className="flex-row p-4 space-x-3 bg-white border-b border-gray-200">
+        <TouchableOpacity
+          className="flex-1 bg-green-500 rounded-lg p-3 flex-row items-center justify-center"
+          onPress={checkMaintenanceReminders}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <Wrench size={20} color="#FFFFFF" />
+          )}
+          <Text className="text-white font-medium ml-2">
+            {loading ? "Checking..." : "Check Maintenance"}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          className="flex-1 bg-blue-500 rounded-lg p-3 flex-row items-center justify-center"
+          onPress={refreshNotifications}
+        >
+          <RefreshCw size={20} color="#FFFFFF" />
+          <Text className="text-white font-medium ml-2">Refresh</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Settings Panel */}
+      {showSettings && (
+        <View className="bg-white border-b border-gray-200 p-4">
+          <Text className="text-lg font-semibold text-gray-800 mb-4">🔔 Notification Settings</Text>
+
+          <View className="space-y-4">
+            <View className="flex-row justify-between items-center py-2">
+              <Text className="text-gray-700">Maintenance Reminders</Text>
+              <Switch
+                value={maintenanceReminders}
+                onValueChange={(value) => {
+                  setMaintenanceReminders(value);
+                  saveSettings();
+                }}
+              />
+            </View>
+
+            <View className="flex-row justify-between items-center py-2">
+              <Text className="text-gray-700">Device Alerts</Text>
+              <Switch
+                value={deviceAlerts}
+                onValueChange={(value) => {
+                  setDeviceAlerts(value);
+                  saveSettings();
+                }}
+              />
+            </View>
+
+            <View className="flex-row justify-between items-center py-2">
+              <Text className="text-gray-700">Email Notifications</Text>
+              <Switch
+                value={emailNotifications}
+                onValueChange={(value) => {
+                  setEmailNotifications(value);
+                  saveSettings();
+                }}
+              />
+            </View>
+          </View>
+        </View>
+      )}
 
       {/* Notification List */}
       {notifications.length > 0 ? (

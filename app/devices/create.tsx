@@ -87,7 +87,7 @@ export default function CreateDeviceScreen() {
     fetchCategories();
     fetchDeviceModels();
   }, []);
-  
+
   useEffect(() => {
     // Request camera permission for barcode scanning
     (async () => {
@@ -152,9 +152,9 @@ export default function CreateDeviceScreen() {
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    
+
     if (status !== "granted") {
-      Alert.alert("Permission needed", "Please grant permission to access your photos");
+      Alert.alert("📷 Permission Required", "Please grant permission to access your photos to add device images.");
       return;
     }
 
@@ -181,18 +181,19 @@ export default function CreateDeviceScreen() {
 
       if (!result.canceled && result.assets && result.assets[0].uri) {
         setImageUri(result.assets[0].uri);
+        Alert.alert("✅ Image Selected", "Device image has been added successfully!");
       }
     } catch (error) {
       console.error("Error picking image:", error);
-      Alert.alert("Error", "Failed to select image");
+      Alert.alert("❌ Image Selection Failed", "Failed to select image. Please try again.");
     }
   };
 
   const captureImage = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    
+
     if (status !== "granted") {
-      Alert.alert("Permission needed", "Please grant permission to access your camera");
+      Alert.alert("📸 Camera Permission Required", "Please grant permission to access your camera to take device photos.");
       return;
     }
 
@@ -219,41 +220,30 @@ export default function CreateDeviceScreen() {
 
       if (!result.canceled && result.assets && result.assets[0].uri) {
         setImageUri(result.assets[0].uri);
+        Alert.alert("📸 Photo Captured!", "Device photo has been captured and added successfully!");
       }
     } catch (error) {
       console.error("Error capturing image:", error);
-      Alert.alert("Error", "Failed to capture image");
+      Alert.alert("❌ Camera Error", "Failed to capture image. Please try again.");
     }
   };
 
   const uploadImage = async (deviceId: string): Promise<string | null> => {
     if (!imageUri) return null;
-    
+
     try {
       setUploading(true);
-      
-      // Skip FileSystem check on web platform
-      if (Platform.OS !== 'web') {
-        try {
-          const imageInfo = await FileSystem.getInfoAsync(imageUri);
-          if (!imageInfo.exists) {
-            throw new Error("Image file doesn't exist");
-          }
-        } catch (error) {
-          console.error("Error checking image:", error);
-          // Continue anyway, as the error might be platform-specific
-        }
-      }
-      
+      console.log('Starting image upload for device:', deviceId);
+
       // Process image data differently based on platform
       let blob: Blob;
-      let base64Data: string | null = null;
-      
+
       if (Platform.OS === 'web') {
         try {
           // For web, fetch the image and convert it to a proper blob
           const response = await fetch(imageUri);
           blob = await response.blob();
+          console.log('Web image processed, blob size:', blob.size);
         } catch (error) {
           console.error("Error processing image on web:", error);
           return null;
@@ -264,82 +254,108 @@ export default function CreateDeviceScreen() {
           const base64 = await FileSystem.readAsStringAsync(imageUri, {
             encoding: FileSystem.EncodingType.Base64,
           });
-          
-          // Store base64 for fallback use
-          base64Data = base64;
-          
+
           // Create ArrayBuffer from base64
           const arrayBuffer = decode(base64);
-          
+
           // Create blob from ArrayBuffer
           const fileExt = imageUri.split('.').pop()?.toLowerCase() || 'jpg';
           blob = new Blob([arrayBuffer], { type: `image/${fileExt}` });
+          console.log('Native image processed, blob size:', blob.size);
         } catch (error) {
           console.error("Error reading image:", error);
           return null;
         }
       }
-      
+
       if (!blob) {
         throw new Error("Failed to process image data");
       }
-      
-      // Determine file extension
-      const fileExt = imageUri.split('.').pop()?.toLowerCase() || 'jpg';
-      const filePath = `${deviceId}.${fileExt}`;
-      const contentType = `image/${fileExt}`;
-      
-      // Make sure user is authenticated before uploading
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        Alert.alert("Error", "You must be logged in to upload images");
-        return null;
-      }
-      
-      // Try multiple approaches to upload
-      try {
-        // First try uploading the blob directly
-      const { data, error } = await supabase.storage
-        .from('device-images')
-        .upload(filePath, blob, {
-            contentType,
-          upsert: true,
-        });
-        
-      if (error) {
-          throw error;
-      }
-      
-        // Get public URL on success
-      const { data: { publicUrl } } = supabase.storage
-        .from('device-images')
-        .getPublicUrl(filePath);
-        
-      return publicUrl;
-      } catch (error) {
-        console.error('First upload attempt failed:', error);
-        
-        // If that failed and we have base64 data, try a different approach
-        if (base64Data) {
-          try {
-            console.log('Trying alternative upload method...');
-            
-            // Store the image URL in the database directly
-            const dbPath = `https://mxbebraqpukeanginfxr.supabase.co/storage/v1/object/public/device-images/${filePath}`;
-            
-            await supabase
-              .from("devices")
-              .update({ image: dbPath })
-              .eq("id", deviceId);
-              
-            return dbPath;
-          } catch (finalError) {
-            console.error('Alternative approach also failed:', finalError);
-            return null;
-          }
+
+      // Determine file extension and create unique filename
+      let fileExt = 'jpg'; // default
+
+      if (Platform.OS === 'web') {
+        // For web, extract from blob type or use jpg as default
+        if (blob.type.startsWith('image/')) {
+          fileExt = blob.type.split('/')[1] || 'jpg';
         }
-        
-        return null;
+      } else {
+        // For native, try to get from URI, but be careful with data URLs
+        if (imageUri.includes('data:image/')) {
+          // Extract from data URL
+          const match = imageUri.match(/data:image\/([^;]+)/);
+          fileExt = match ? match[1] : 'jpg';
+        } else {
+          // Extract from file path
+          const uriParts = imageUri.split('.');
+          fileExt = uriParts.length > 1 ? uriParts.pop()?.toLowerCase() || 'jpg' : 'jpg';
+        }
+      }
+
+      // Ensure valid file extension
+      if (!['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(fileExt)) {
+        fileExt = 'jpg';
+      }
+
+      const timestamp = Date.now();
+      const filePath = `${deviceId}_${timestamp}.${fileExt}`;
+      const contentType = `image/${fileExt}`;
+
+      console.log('Uploading to path:', filePath);
+
+      // Try storage upload first, but use fallback if it fails
+      try {
+        const { data, error } = await supabase.storage
+          .from('device-images')
+          .upload(filePath, blob, {
+            contentType,
+            upsert: true,
+          });
+
+        if (error) {
+          console.error('Storage upload error:', error);
+          throw error;
+        }
+
+        console.log('Upload successful:', data);
+
+        // Get public URL
+        const { data: { publicUrl } } = supabase.storage
+          .from('device-images')
+          .getPublicUrl(filePath);
+
+        console.log('Public URL generated:', publicUrl);
+        return publicUrl;
+
+      } catch (uploadError) {
+        console.error('Storage upload failed, using fallback:', uploadError);
+
+        // Fallback: Store image as base64 in database
+        try {
+          console.log('Using fallback: storing as base64 in database');
+
+          // Convert blob to base64 for database storage
+          const reader = new FileReader();
+          const base64Promise = new Promise<string>((resolve, reject) => {
+            reader.onload = () => {
+              const result = reader.result as string;
+              resolve(result);
+            };
+            reader.onerror = reject;
+          });
+
+          reader.readAsDataURL(blob);
+          const base64DataUrl = await base64Promise;
+
+          console.log('Fallback successful: image stored as base64');
+          return base64DataUrl;
+
+        } catch (fallbackError) {
+          console.error('Fallback also failed:', fallbackError);
+          // Continue without image - don't fail the entire device creation
+          return null;
+        }
       }
     } catch (error) {
       console.error('Error in uploadImage:', error);
@@ -351,54 +367,127 @@ export default function CreateDeviceScreen() {
 
   const generateQRCode = async (deviceId: string, serialNumber: string): Promise<string | null> => {
     try {
-      // Create QR code data
+      console.log('Generating QR code for device:', deviceId);
+
+      // Create comprehensive QR code data
       const qrData = JSON.stringify({
         id: deviceId,
         serial: serialNumber,
-        type: "device"
+        type: "device",
+        name: name,
+        model: model,
+        restaurant_id: selectedRestaurant,
+        created_at: new Date().toISOString(),
+        app_url: "https://your-app-domain.com/device/" + deviceId
       });
-      
-      // Store QR code data in the database directly, regardless of storage outcome
+
+      console.log('QR code data created:', qrData);
+
+      // Store QR code data in the database - this is the primary storage
       try {
-        await supabase
+        const { error: dbError } = await supabase
           .from("devices")
-          .update({ qr_code: qrData })
+          .update({
+            qr_code: qrData,
+            qr_code_data: JSON.parse(qrData) // Store as JSONB for easier querying
+          })
           .eq("id", deviceId);
+
+        if (dbError) {
+          console.error('Database QR code storage error:', dbError);
+          throw dbError;
+        }
+
+        console.log('QR code data stored in database successfully');
       } catch (dbError) {
-        console.error('Error storing QR code data in database:', dbError);
-        // Continue anyway, we still want to try storage upload
+        console.error('Failed to store QR code in database:', dbError);
+        // This is critical - if we can't store in DB, return null
+        return null;
       }
-      
-      // Try storage upload, but consider it optional
+
+      // Try storage upload as backup, but don't fail if it doesn't work
       try {
-        // Make sure user is authenticated before uploading
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-      // Upload data to device-data bucket
-      const filePath = `${deviceId}.json`;
-      
-      // Create proper blob for JSON data
-      const blob = new Blob([qrData], {
-        type: 'application/json'
-      });
-      
-          await supabase.storage
-        .from('device-data')
-        .upload(filePath, blob, {
-          contentType: 'application/json',
-          upsert: true
+        const timestamp = Date.now();
+        const filePath = `${deviceId}_${timestamp}.json`;
+
+        // Create proper blob for JSON data
+        const blob = new Blob([qrData], {
+          type: 'application/json'
         });
+
+        const { error: storageError } = await supabase.storage
+          .from('device-data')
+          .upload(filePath, blob, {
+            contentType: 'application/json',
+            upsert: true
+          });
+
+        if (storageError) {
+          console.log('Storage upload failed (non-critical):', storageError);
+        } else {
+          console.log('QR code data also stored in storage bucket');
         }
       } catch (storageError) {
-        console.error('Error storing QR code data in storage:', storageError);
-        // Continue anyway, as we already stored the data in the database
+        console.log('Storage upload failed (non-critical):', storageError);
+        // This is non-critical, continue anyway
       }
-      
+
       // Return the data itself, which can be used directly by QRCodeGenerator
       return qrData;
     } catch (error) {
       console.error('Error generating QR code data:', error);
       return null;
+    }
+  };
+
+  const handleSerialNumberChange = async (value: string) => {
+    setSerialNumber(value);
+    setSerialNumberError(null);
+
+    if (!value.trim()) {
+      return;
+    }
+
+    // Basic validation
+    if (value.length < 3) {
+      setSerialNumberError("Serial number must be at least 3 characters long");
+      return;
+    }
+
+    if (value.length > 50) {
+      setSerialNumberError("Serial number must be less than 50 characters");
+      return;
+    }
+
+    // Check for invalid characters
+    if (!/^[A-Za-z0-9\-_]+$/.test(value)) {
+      setSerialNumberError("Serial number can only contain letters, numbers, hyphens, and underscores");
+      return;
+    }
+
+    // Check for duplicates
+    setIsCheckingSerial(true);
+    try {
+      const { data: existingDevice, error } = await supabase
+        .from("devices")
+        .select("id, name")
+        .eq("serial_number", value)
+        .maybeSingle();
+
+      if (error) {
+        console.error("Error checking serial number:", error);
+        setSerialNumberError("Error validating serial number");
+        return;
+      }
+
+      if (existingDevice) {
+        setSerialNumberError(`Serial number already exists for device: ${existingDevice.name}`);
+      }
+    } catch (error) {
+      console.error("Error checking serial number:", error);
+      setSerialNumberError("Error validating serial number");
+    } finally {
+      setIsCheckingSerial(false);
     }
   };
 
@@ -418,45 +507,95 @@ export default function CreateDeviceScreen() {
     }
   };
 
-  const handleSave = async () => {
-    if (!name || !serialNumber) {
-      Alert.alert("Error", "Name and serial number are required");
-      return;
+  const validateForm = (): { isValid: boolean; errors: string[] } => {
+    const errors: string[] = [];
+
+    // Required field validation
+    if (!name?.trim()) {
+      errors.push("Device name is required");
+    } else if (name.trim().length < 2) {
+      errors.push("Device name must be at least 2 characters long");
+    } else if (name.trim().length > 100) {
+      errors.push("Device name must be less than 100 characters");
     }
 
-    if (serialNumberError) {
-      Alert.alert("Error", serialNumberError);
-      return;
+    if (!serialNumber?.trim()) {
+      errors.push("Serial number is required");
+    } else if (serialNumber.trim().length < 3) {
+      errors.push("Serial number must be at least 3 characters long");
+    } else if (serialNumber.trim().length > 50) {
+      errors.push("Serial number must be less than 50 characters");
+    } else if (serialNumberError) {
+      errors.push(serialNumberError);
     }
 
     if (!modelId) {
-      Alert.alert("Error", "Please select a device model");
-      return;
+      errors.push("Device model selection is required");
     }
 
     if (!selectedRestaurant) {
-      Alert.alert("Error", "Please select a restaurant");
-      return;
+      errors.push("Restaurant selection is required");
     }
 
-    // Validate required custom fields
+    // Custom field validation
     const missingRequiredFields = customFields.filter(
       field => field.required && (
-        (typeof field.value === "string" && !field.value.trim()) || 
-        field.value === null || 
+        (typeof field.value === "string" && !field.value.trim()) ||
+        field.value === null ||
         field.value === undefined
       )
     );
-    
+
     if (missingRequiredFields.length > 0) {
+      errors.push(`Required custom fields missing: ${missingRequiredFields.map(f => f.name).join(", ")}`);
+    }
+
+    // Date validation
+    if (purchaseDate && warrantyExpiry && purchaseDate > warrantyExpiry) {
+      errors.push("Warranty expiry date cannot be before purchase date");
+    }
+
+    if (purchaseDate && purchaseDate > new Date()) {
+      errors.push("Purchase date cannot be in the future");
+    }
+
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
+  };
+
+  const handleSave = async () => {
+    // Validate form first
+    const validation = validateForm();
+    if (!validation.isValid) {
       Alert.alert(
-        "Error", 
-        `Please fill in the required custom field(s): ${missingRequiredFields.map(f => f.name).join(", ")}`
+        "Validation Error",
+        validation.errors.join('\n\n'),
+        [{ text: "OK" }]
       );
       return;
     }
 
+    // Check if serial number validation is still in progress
+    if (isCheckingSerial) {
+      Alert.alert("Please Wait", "Serial number validation is in progress. Please wait a moment and try again.");
+      return;
+    }
+
+    console.log("Starting device creation process...");
     setLoading(true);
+
+    // Add a timeout to prevent infinite loading
+    const timeoutId = setTimeout(() => {
+      console.log("Device creation timeout reached");
+      setLoading(false);
+      Alert.alert(
+        "Timeout",
+        "Device creation is taking too long. Please try again.",
+        [{ text: "OK" }]
+      );
+    }, 60000); // 60 second timeout
 
     try {
       // Make sure user is authenticated
@@ -466,48 +605,48 @@ export default function CreateDeviceScreen() {
         setLoading(false);
         return;
       }
-      
+
       // Check if serial number already exists
       const { data: existingDevice, error: checkError } = await supabase
         .from("devices")
         .select("id, name")
         .eq("serial_number", serialNumber)
         .maybeSingle();
-        
+
       if (checkError) {
         console.error("Error checking for existing device:", checkError);
       }
-      
+
       if (existingDevice) {
         Alert.alert(
-          "Duplicate Serial Number", 
+          "Duplicate Serial Number",
           `A device with serial number "${serialNumber}" already exists (${existingDevice.name}). Please use a different serial number.`
         );
         setLoading(false);
         return;
       }
-      
+
       // Verify model exists
       const { data: modelData, error: modelError } = await supabase
         .from("device_models")
         .select("id, name, manufacturer")
         .eq("id", modelId)
         .single();
-        
+
       if (modelError || !modelData) {
         console.error("Error validating model:", modelError);
         Alert.alert("Error", "The selected model could not be verified. Please try selecting it again.");
         setLoading(false);
         return;
       }
-      
+
       // Format custom fields for database
       const customFieldsObject: Record<string, any> = {};
-      
+
       customFields.forEach(field => {
         customFieldsObject[field.name] = field.value;
       });
-      
+
       // Prepare data for insert
       const deviceData = {
         name,
@@ -534,16 +673,16 @@ export default function CreateDeviceScreen() {
 
       if (error) {
         console.error("Error creating device:", error);
-        
+
         // Handle specific database errors with user-friendly messages
         if (error.code === '23505' && error.message.includes('devices_serial_number_key')) {
           Alert.alert(
-            "Duplicate Serial Number", 
+            "Duplicate Serial Number",
             "A device with this serial number already exists. Please use a different serial number."
           );
         } else {
           Alert.alert(
-            "Error", 
+            "Error",
             `Failed to add device: ${error.message || "Database error"}. Please try again or contact support.`
           );
         }
@@ -555,17 +694,25 @@ export default function CreateDeviceScreen() {
         let newDeviceId = data.id;
         let hasErrors = false;
         let errorMessages = [];
-        
-        // Try to upload image, but continue even if it fails
+
+        // Try to upload image with timeout, but continue even if it fails
         if (imageUri) {
           try {
-            const imageUrl = await uploadImage(newDeviceId);
-          if (imageUrl) {
+            console.log("Starting image upload...");
+            const imageUploadPromise = uploadImage(newDeviceId);
+            const timeoutPromise = new Promise((_, reject) =>
+              setTimeout(() => reject(new Error("Image upload timeout")), 30000)
+            );
+
+            const imageUrl = await Promise.race([imageUploadPromise, timeoutPromise]);
+
+            if (imageUrl) {
               // Update device with image URL if upload succeeded
               await supabase
                 .from("devices")
                 .update({ image: imageUrl })
                 .eq("id", newDeviceId);
+              console.log("Image upload completed successfully");
             } else {
               hasErrors = true;
               errorMessages.push("Image upload failed");
@@ -577,15 +724,23 @@ export default function CreateDeviceScreen() {
           }
         }
 
-        // Generate QR code data - continue even if storing in bucket fails
+        // Generate QR code data with timeout - continue even if storing in bucket fails
         try {
-          const qrCodeData = await generateQRCode(newDeviceId, serialNumber);
-        if (qrCodeData) {
-          // Store QR code data in the database 
+          console.log("Starting QR code generation...");
+          const qrCodePromise = generateQRCode(newDeviceId, serialNumber);
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("QR code generation timeout")), 10000)
+          );
+
+          const qrCodeData = await Promise.race([qrCodePromise, timeoutPromise]);
+
+          if (qrCodeData) {
+            // Store QR code data in the database
             await supabase
-            .from("devices")
+              .from("devices")
               .update({ qr_code: qrCodeData })
               .eq("id", newDeviceId);
+            console.log("QR code generation completed successfully");
           } else {
             hasErrors = true;
             errorMessages.push("QR code generation failed");
@@ -604,13 +759,13 @@ export default function CreateDeviceScreen() {
               .select("maintenance_interval")
               .eq("id", selectedCategory)
               .single();
-              
+
             if (categoryData?.maintenance_interval) {
               // Let database trigger handle this calculation, just make a dummy update to trigger it
               await supabase
                 .from("devices")
-                .update({ 
-                  last_maintenance: purchaseDate ? purchaseDate.toISOString() : new Date().toISOString() 
+                .update({
+                  last_maintenance: purchaseDate ? purchaseDate.toISOString() : new Date().toISOString()
                 })
                 .eq("id", newDeviceId);
             }
@@ -620,75 +775,131 @@ export default function CreateDeviceScreen() {
           }
         }
 
-        if (hasErrors) {
-          // Show success with warnings
-          Alert.alert(
-            "Device Created with Warnings",
-            `Device was created successfully, but the following issues occurred: ${errorMessages.join(", ")}`,
-            [
-              { 
-                text: "View Device", 
-                onPress: () => router.push(`/devices/${newDeviceId}`)
-              },
-              {
-                text: "Create Another",
-                onPress: () => {
-                  // Reset form for a new device
-                  setName("");
-                  setSerialNumber("");
-                  setModelId(null);
-                  setModel("");
-                  setType("");
-                  setImageUri(null);
-                  setStatus("operational");
-                  setSelectedRestaurant("");
-                  setSelectedCategory("");
-                  setPurchaseDate(null);
-                  setWarrantyExpiry(null);
-                  setCustomFields([]);
-                  setLoading(false);
-                }
-              }
-            ]
-          );
-        } else {
-          // Show success and navigate to device details
-        Alert.alert(
-          "Success",
-            "Device added successfully!",
-            [
-              { 
-                text: "View Device", 
-                onPress: () => router.push(`/devices/${newDeviceId}`)
-              },
-              {
-                text: "Create Another",
-                style: "cancel",
-                onPress: () => {
-                  // Reset form for a new device
-                  setName("");
-                  setSerialNumber("");
-                  setModelId(null);
-                  setModel("");
-                  setType("");
-                  setImageUri(null);
-                  setStatus("operational");
-                  setSelectedRestaurant("");
-                  setSelectedCategory("");
-                  setPurchaseDate(null);
-                  setWarrantyExpiry(null);
-                  setCustomFields([]);
-                  setLoading(false);
-                }
-              }
-            ]
-          );
+        // Create success message with details
+        let successTitle = "Device Created Successfully! 🎉";
+        let successMessage = `"${name}" has been added to your device inventory.`;
+
+        const successDetails: string[] = [];
+        if (imageUri && !errorMessages.includes("Image upload failed")) {
+          successDetails.push("✅ Image uploaded");
         }
+        if (!errorMessages.includes("QR code generation failed")) {
+          successDetails.push("✅ QR code generated");
+        }
+        if (selectedCategory) {
+          successDetails.push("✅ Maintenance schedule configured");
+        }
+
+        if (hasErrors) {
+          successTitle = "Device Created with Warnings ⚠️";
+          successMessage += "\n\nSome optional features failed:";
+          errorMessages.forEach(error => {
+            successMessage += `\n• ${error}`;
+          });
+          successMessage += "\n\nYou can fix these issues later by editing the device.";
+        } else if (successDetails.length > 0) {
+          successMessage += "\n\n" + successDetails.join("\n");
+        }
+
+        // Clear timeout and set loading to false before showing alert
+        clearTimeout(timeoutId);
+        setLoading(false);
+        console.log("Device creation completed successfully");
+
+        // Show success alert and automatically redirect after a short delay
+        Alert.alert(
+          "🎉 Device Created Successfully!",
+          `"${name}" has been added to your inventory and is ready for use.`,
+          [
+            {
+              text: "View Device",
+              style: "default",
+              onPress: () => {
+                router.replace(`/devices/${newDeviceId}`);
+              }
+            },
+            {
+              text: "Back to Devices",
+              onPress: () => {
+                router.replace("/devices");
+              }
+            },
+            {
+              text: "Create Another",
+              style: "cancel",
+              onPress: () => {
+                // Reset form for a new device
+                setName("");
+                setSerialNumber("");
+                setModelId("");
+                setModel("");
+                setType("");
+                setImageUri(null);
+                setStatus("operational");
+                setSelectedRestaurant("");
+                setSelectedCategory("");
+                setPurchaseDate(null);
+                setWarrantyExpiry(null);
+                setCustomFields([]);
+                setSerialNumberError(null);
+              }
+            }
+          ],
+          {
+            cancelable: false,
+            onDismiss: () => {
+              // If user dismisses without choosing, go back to devices list
+              setTimeout(() => {
+                router.replace("/devices");
+              }, 500);
+            }
+          }
+        );
+
+        // Auto-redirect to devices list after 3 seconds if no action taken
+        setTimeout(() => {
+          console.log("⏰ Auto-redirecting to devices list...");
+          router.replace("/devices");
+        }, 3000);
       }
     } catch (error) {
-      console.error("Error adding device:", error);
-      Alert.alert("Error", "Failed to add device");
+      console.error("Unexpected error adding device:", error);
+
+      // Clear timeout and loading state
+      clearTimeout(timeoutId);
       setLoading(false);
+
+      let errorMessage = "An unexpected error occurred while creating the device.";
+
+      if (error instanceof Error) {
+        if (error.message.includes("network")) {
+          errorMessage = "Network error. Please check your internet connection and try again.";
+        } else if (error.message.includes("timeout")) {
+          errorMessage = "Request timed out. Please try again.";
+        } else {
+          errorMessage = `Error: ${error.message}`;
+        }
+      }
+
+      Alert.alert(
+        "Creation Failed",
+        errorMessage + "\n\nPlease try again or contact support if the problem persists.",
+        [
+          {
+            text: "Try Again",
+            onPress: () => {
+              // Loading is already set to false above
+            }
+          },
+          {
+            text: "Go Back",
+            style: "cancel",
+            onPress: () => {
+              router.back();
+            }
+          }
+        ]
+      );
     }
   };
 
@@ -697,26 +908,26 @@ export default function CreateDeviceScreen() {
       Alert.alert("Error", "Field name is required");
       return;
     }
-    
+
     // Check for duplicate field name
     if (customFields.some(field => field.name === newFieldName.trim())) {
       Alert.alert("Error", "A field with this name already exists");
       return;
     }
-    
+
     let initialValue: any = "";
     if (newFieldType === "number") initialValue = 0;
     if (newFieldType === "boolean") initialValue = false;
     if (newFieldType === "date") initialValue = new Date();
     if (newFieldType === "selection") initialValue = newFieldOptions.split(",")[0]?.trim() || "";
-    
+
     const newField: CustomField = {
       name: newFieldName.trim(),
       type: newFieldType,
       value: initialValue,
       required: newFieldRequired
     };
-    
+
     if (newFieldType === "selection") {
       newField.options = newFieldOptions.split(",").map(opt => opt.trim()).filter(opt => opt);
       if (!newField.options.length) {
@@ -724,7 +935,7 @@ export default function CreateDeviceScreen() {
         return;
       }
     }
-    
+
     setCustomFields([...customFields, newField]);
     setNewFieldName("");
     setNewFieldType("text");
@@ -755,7 +966,7 @@ export default function CreateDeviceScreen() {
             placeholder={`Enter ${field.name}`}
           />
         );
-      
+
       case "number":
         return (
           <TextInput
@@ -771,7 +982,7 @@ export default function CreateDeviceScreen() {
             placeholder={`Enter ${field.name}`}
           />
         );
-      
+
       case "boolean":
         return (
           <View className="flex-row items-center justify-between bg-white border border-gray-300 rounded-lg px-4 py-3">
@@ -782,7 +993,7 @@ export default function CreateDeviceScreen() {
             />
           </View>
         );
-      
+
       case "date":
         return (
           <>
@@ -793,26 +1004,26 @@ export default function CreateDeviceScreen() {
                   // For web, use a simple date input
                   const input = document.createElement('input');
                   input.type = 'date';
-                  input.value = field.value instanceof Date ? 
-                    field.value.toISOString().split('T')[0] : 
+                  input.value = field.value instanceof Date ?
+                    field.value.toISOString().split('T')[0] :
                     new Date().toISOString().split('T')[0];
-                  
+
                   input.onchange = (e: any) => {
                     const date = new Date(e.target.value);
                     updateCustomFieldValue(index, date);
                   };
-                  
+
                   // Trigger the input click to open the date picker
                   input.style.position = 'absolute';
                   input.style.opacity = '0';
                   document.body.appendChild(input);
                   input.click();
-                  
+
                   // Clean up after selection
                   input.addEventListener('change', () => {
                     document.body.removeChild(input);
                   });
-                  
+
                   // Clean up if canceled
                   input.addEventListener('blur', () => {
                     if (document.body.contains(input)) {
@@ -834,7 +1045,7 @@ export default function CreateDeviceScreen() {
             </Text>
             <Calendar size={20} color="#6B7280" />
             </TouchableOpacity>
-            
+
             {Platform.OS !== 'web' && field.showPicker && (
               Platform.OS === 'ios' ? (
                 <View className="bg-white border border-gray-300 rounded-lg mt-1 p-2">
@@ -870,7 +1081,7 @@ export default function CreateDeviceScreen() {
                   const tempFields = [...customFields];
                   tempFields[index].showPicker = false;
                   setCustomFields(tempFields);
-                  
+
                   if (event.type === "set" && selectedDate) {
                     updateCustomFieldValue(index, selectedDate);
                   }
@@ -880,7 +1091,7 @@ export default function CreateDeviceScreen() {
             )}
           </>
         );
-      
+
       case "selection":
         return (
           <View className="bg-white border border-gray-300 rounded-lg px-1 py-1">
@@ -894,126 +1105,149 @@ export default function CreateDeviceScreen() {
             </Picker>
           </View>
         );
-      
+
       default:
         return null;
     }
   };
 
-  const handleSerialNumberChange = (text: string) => {
-    setSerialNumber(text);
-    setSerialNumberError(null);
-    
-    // Simple validation
-    if (text.trim() === "") {
-      return;
-    }
-    
-    // Add debounce to avoid too many requests
-    // Only check if serial number is long enough (e.g., at least 4 characters)
-    if (text.length >= 4) {
-      setIsCheckingSerial(true);
-      
-      // Use timeout for debounce
-      const checkTimeout = setTimeout(async () => {
-        try {
-          // Check if serial number already exists
-          const { data, error } = await supabase
-            .from("devices")
-            .select("id, name")
-            .eq("serial_number", text)
-            .maybeSingle();
-            
-          if (error) {
-            console.error("Error checking serial number:", error);
-          } else if (data) {
-            setSerialNumberError(`Serial number already in use by "${data.name}"`);
-          }
-        } catch (error) {
-          console.error("Exception checking serial:", error);
-        } finally {
-          setIsCheckingSerial(false);
-        }
-      }, 500);
-      
-      // Cleanup function to cancel the timeout if component unmounts or input changes again
-      return () => clearTimeout(checkTimeout);
-    }
-  };
+  // Custom field management functions are defined above
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
       <StatusBar style="dark" />
-      
+
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         className="flex-1"
       >
         <View className="flex-row justify-between items-center p-4 border-b border-gray-200 bg-white">
-          <View className="flex-row items-center">
-            <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace("/devices")} className="mr-4">
+          <View className="flex-row items-center flex-1">
+            <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace("/devices")} className="mr-3">
               <ArrowLeft size={24} color="#0F172A" />
             </TouchableOpacity>
-            <Text className="text-xl font-bold text-gray-800">Add New Device</Text>
+            <Text className="text-lg md:text-xl font-bold text-gray-800 flex-1" numberOfLines={1}>Add New Device</Text>
           </View>
           <TouchableOpacity
-            className="bg-blue-500 px-4 py-2 rounded-lg flex-row items-center"
+            className={`px-3 md:px-4 py-2 rounded-lg flex-row items-center ${
+              loading || isCheckingSerial || !name?.trim() || !serialNumber?.trim() || !modelId || !selectedRestaurant
+                ? "bg-gray-400"
+                : "bg-blue-500"
+            }`}
             onPress={handleSave}
-            disabled={loading}
+            disabled={loading || isCheckingSerial || !name?.trim() || !serialNumber?.trim() || !modelId || !selectedRestaurant}
           >
             {loading ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
+              <>
+                <ActivityIndicator size="small" color="#FFFFFF" />
+                <Text className="text-white font-medium ml-2 hidden md:block">Creating...</Text>
+              </>
+            ) : isCheckingSerial ? (
+              <>
+                <ActivityIndicator size="small" color="#FFFFFF" />
+                <Text className="text-white font-medium ml-2 hidden md:block">Validating...</Text>
+              </>
             ) : (
               <>
                 <Save size={18} color="#FFFFFF" />
-                <Text className="text-white font-medium ml-2">Save</Text>
+                <Text className="text-white font-medium ml-2 hidden md:block">Create</Text>
               </>
             )}
           </TouchableOpacity>
         </View>
-        
+
         <ScrollView className="flex-1 p-4" showsVerticalScrollIndicator={false}>
+          {/* Progress Indicator */}
+          <View className="bg-white rounded-lg shadow-sm p-4 mb-4">
+            <Text className="text-sm font-medium text-gray-700 mb-2">Form Completion</Text>
+            <View className="flex-row items-center">
+              <View className="flex-1 bg-gray-200 rounded-full h-2 mr-3">
+                <View
+                  className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                  style={{
+                    width: `${Math.round(
+                      ((name?.trim() ? 1 : 0) +
+                       (serialNumber?.trim() && !serialNumberError ? 1 : 0) +
+                       (modelId ? 1 : 0) +
+                       (selectedRestaurant ? 1 : 0)) / 4 * 100
+                    )}%`
+                  }}
+                />
+              </View>
+              <Text className="text-xs text-gray-600">
+                {Math.round(
+                  ((name?.trim() ? 1 : 0) +
+                   (serialNumber?.trim() && !serialNumberError ? 1 : 0) +
+                   (modelId ? 1 : 0) +
+                   (selectedRestaurant ? 1 : 0)) / 4 * 100
+                )}%
+              </Text>
+            </View>
+            <View className="flex-row flex-wrap mt-2">
+              <View className={`flex-row items-center mr-4 mb-1 ${name?.trim() ? 'opacity-100' : 'opacity-50'}`}>
+                <View className={`w-2 h-2 rounded-full mr-1 ${name?.trim() ? 'bg-green-500' : 'bg-gray-300'}`} />
+                <Text className="text-xs text-gray-600">Name</Text>
+              </View>
+              <View className={`flex-row items-center mr-4 mb-1 ${serialNumber?.trim() && !serialNumberError ? 'opacity-100' : 'opacity-50'}`}>
+                <View className={`w-2 h-2 rounded-full mr-1 ${serialNumber?.trim() && !serialNumberError ? 'bg-green-500' : 'bg-gray-300'}`} />
+                <Text className="text-xs text-gray-600">Serial</Text>
+              </View>
+              <View className={`flex-row items-center mr-4 mb-1 ${modelId ? 'opacity-100' : 'opacity-50'}`}>
+                <View className={`w-2 h-2 rounded-full mr-1 ${modelId ? 'bg-green-500' : 'bg-gray-300'}`} />
+                <Text className="text-xs text-gray-600">Model</Text>
+              </View>
+              <View className={`flex-row items-center mr-4 mb-1 ${selectedRestaurant ? 'opacity-100' : 'opacity-50'}`}>
+                <View className={`w-2 h-2 rounded-full mr-1 ${selectedRestaurant ? 'bg-green-500' : 'bg-gray-300'}`} />
+                <Text className="text-xs text-gray-600">Location</Text>
+              </View>
+            </View>
+          </View>
+
           <View className="bg-white rounded-lg shadow-sm p-4 mb-6">
             <Text className="text-lg font-semibold text-gray-800 mb-4">Device Information</Text>
-            
+
             {/* Device Image */}
-            <View className="flex items-center mb-6">
-              <View className="mb-3 bg-gray-100 rounded-xl p-4 relative">
+            <View className="items-center mb-6">
+              <View className="mb-4 bg-gray-100 rounded-xl p-4 relative">
                 {imageUri ? (
                   <View>
-                  <Image
-                    source={{ uri: imageUri }}
-                    className="w-32 h-32 rounded-lg"
-                    resizeMode="cover"
-                  />
+                    <Image
+                      source={{ uri: imageUri }}
+                      className="w-24 h-24 md:w-32 md:h-32 rounded-lg"
+                      resizeMode="cover"
+                    />
                     <TouchableOpacity
-                      className="absolute top-2 right-2 bg-red-500 rounded-full p-1"
-                      onPress={() => setImageUri(null)}
+                      className="absolute -top-2 -right-2 bg-red-500 rounded-full p-1.5"
+                      onPress={() => {
+                        setImageUri(null);
+                        Alert.alert("🗑️ Image Removed", "Device image has been removed.");
+                      }}
                     >
-                      <X size={16} color="#FFFFFF" />
+                      <X size={14} color="#FFFFFF" />
                     </TouchableOpacity>
                   </View>
                 ) : (
-                  <Package size={80} color="#9CA3AF" />
+                  <Package size={60} color="#9CA3AF" />
                 )}
               </View>
-              <View className="flex-row">
+              <View className="flex-row space-x-3">
                 <TouchableOpacity
-                  className="bg-blue-500 px-3 py-2 rounded-lg flex-row items-center mr-2"
+                  className="bg-blue-500 px-4 py-2.5 rounded-lg flex-row items-center"
                   onPress={pickImage}
                 >
-                  <Text className="text-white">Gallery</Text>
+                  <Package size={16} color="#FFFFFF" />
+                  <Text className="text-white font-medium ml-2">Gallery</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  className="bg-green-500 px-3 py-2 rounded-lg flex-row items-center"
+                  className="bg-green-500 px-4 py-2.5 rounded-lg flex-row items-center"
                   onPress={captureImage}
                 >
-                  <Camera size={16} color="#FFFFFF" className="mr-1" />
-                  <Text className="text-white">Camera</Text>
+                  <Camera size={16} color="#FFFFFF" />
+                  <Text className="text-white font-medium ml-2">Camera</Text>
                 </TouchableOpacity>
               </View>
             </View>
-            
+
             {/* Basic Fields */}
             <View className="mb-4">
               <Text className="text-sm font-medium text-gray-700 mb-1">Name *</Text>
@@ -1024,7 +1258,7 @@ export default function CreateDeviceScreen() {
                 placeholder="Enter device name"
               />
             </View>
-            
+
             <View className="mb-4">
               <Text className="text-sm font-medium text-gray-700 mb-1">Serial Number *</Text>
               <View className="flex-row">
@@ -1052,7 +1286,7 @@ export default function CreateDeviceScreen() {
                 <Text className="text-red-500 text-xs mt-1">{serialNumberError}</Text>
               )}
             </View>
-            
+
             <View className="mb-4">
               <View className="flex-row justify-between items-center mb-1">
                 <Text className="text-sm font-medium text-gray-700">Model *</Text>
@@ -1076,7 +1310,7 @@ export default function CreateDeviceScreen() {
                 </TouchableOpacity>
               </View>
             </View>
-            
+
             <View className="mb-4">
               <Text className="text-sm font-medium text-gray-700 mb-1">Status</Text>
               <View className="bg-white border border-gray-300 rounded-lg px-1 py-1">
@@ -1090,7 +1324,7 @@ export default function CreateDeviceScreen() {
                 </Picker>
               </View>
             </View>
-            
+
             <View className="mb-4">
               <Text className="text-sm font-medium text-gray-700 mb-1">Restaurant *</Text>
               <View className="bg-white border border-gray-300 rounded-lg px-1 py-1">
@@ -1109,7 +1343,7 @@ export default function CreateDeviceScreen() {
                 </Picker>
               </View>
             </View>
-            
+
             <View className="mb-4">
               <Text className="text-sm font-medium text-gray-700 mb-1">Device Category</Text>
               <View className="bg-white border border-gray-300 rounded-lg px-1 py-1">
@@ -1129,11 +1363,11 @@ export default function CreateDeviceScreen() {
               </View>
             </View>
           </View>
-          
+
           {/* Purchase & Warranty */}
           <View className="bg-white rounded-lg shadow-sm p-4 mb-6">
             <Text className="text-lg font-semibold text-gray-800 mb-4">Purchase & Warranty</Text>
-            
+
             <View className="mb-4">
               <Text className="text-sm font-medium text-gray-700 mb-1">Purchase Date</Text>
               <TouchableOpacity
@@ -1143,26 +1377,27 @@ export default function CreateDeviceScreen() {
                     // For web, use a simple date input
                     const input = document.createElement('input');
                     input.type = 'date';
-                    input.value = purchaseDate ? 
-                      purchaseDate.toISOString().split('T')[0] : 
+                    input.value = purchaseDate ?
+                      purchaseDate.toISOString().split('T')[0] :
                       new Date().toISOString().split('T')[0];
-                    
+
                     input.onchange = (e: any) => {
                       const date = new Date(e.target.value);
                       setPurchaseDate(date);
+                      Alert.alert("📅 Purchase Date Set", `Purchase date set to ${date.toLocaleDateString()}`);
                     };
-                    
+
                     // Trigger the input click to open the date picker
                     input.style.position = 'absolute';
                     input.style.opacity = '0';
                     document.body.appendChild(input);
                     input.click();
-                    
+
                     // Clean up after selection
                     input.addEventListener('change', () => {
                       document.body.removeChild(input);
                     });
-                    
+
                     // Clean up if canceled
                     input.addEventListener('blur', () => {
                       if (document.body.contains(input)) {
@@ -1179,7 +1414,7 @@ export default function CreateDeviceScreen() {
                 </Text>
                 <Calendar size={20} color="#6B7280" />
               </TouchableOpacity>
-              
+
               {Platform.OS !== 'web' && showPurchaseDatePicker && (
                 Platform.OS === 'ios' ? (
                   <View className="bg-white border border-gray-300 rounded-lg mt-1 p-2">
@@ -1219,7 +1454,7 @@ export default function CreateDeviceScreen() {
                 )
               )}
             </View>
-            
+
             <View className="mb-4">
               <Text className="text-sm font-medium text-gray-700 mb-1">Warranty Expiry</Text>
               <TouchableOpacity
@@ -1229,26 +1464,26 @@ export default function CreateDeviceScreen() {
                     // For web, use a simple date input
                     const input = document.createElement('input');
                     input.type = 'date';
-                    input.value = warrantyExpiry ? 
-                      warrantyExpiry.toISOString().split('T')[0] : 
+                    input.value = warrantyExpiry ?
+                      warrantyExpiry.toISOString().split('T')[0] :
                       new Date().toISOString().split('T')[0];
-                    
+
                     input.onchange = (e: any) => {
                       const date = new Date(e.target.value);
                       setWarrantyExpiry(date);
                     };
-                    
+
                     // Trigger the input click to open the date picker
                     input.style.position = 'absolute';
                     input.style.opacity = '0';
                     document.body.appendChild(input);
                     input.click();
-                    
+
                     // Clean up after selection
                     input.addEventListener('change', () => {
                       document.body.removeChild(input);
                     });
-                    
+
                     // Clean up if canceled
                     input.addEventListener('blur', () => {
                       if (document.body.contains(input)) {
@@ -1265,7 +1500,7 @@ export default function CreateDeviceScreen() {
                 </Text>
                 <Calendar size={20} color="#6B7280" />
               </TouchableOpacity>
-              
+
               {Platform.OS !== 'web' && showWarrantyDatePicker && (
                 Platform.OS === 'ios' ? (
                   <View className="bg-white border border-gray-300 rounded-lg mt-1 p-2">
@@ -1306,7 +1541,7 @@ export default function CreateDeviceScreen() {
               )}
             </View>
           </View>
-          
+
           {/* Custom Fields */}
           <View className="bg-white rounded-lg shadow-sm p-4 mb-6">
             <View className="flex-row justify-between items-center mb-4">
@@ -1318,7 +1553,7 @@ export default function CreateDeviceScreen() {
                 <Plus size={18} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
-            
+
             {customFields.length === 0 ? (
               <Text className="text-gray-500 italic text-center py-4">
                 No custom fields added yet
@@ -1341,11 +1576,11 @@ export default function CreateDeviceScreen() {
                 </View>
               ))
             )}
-            
+
             {showAddField && (
               <View className="bg-blue-50 p-4 rounded-lg mt-2">
                 <Text className="text-base font-medium text-blue-800 mb-3">Add Custom Field</Text>
-                
+
                 <View className="mb-3">
                   <Text className="text-sm font-medium text-gray-700 mb-1">Field Name *</Text>
                   <TextInput
@@ -1355,7 +1590,7 @@ export default function CreateDeviceScreen() {
                     placeholder="Enter field name"
                   />
                 </View>
-                
+
                 <View className="mb-3">
                   <Text className="text-sm font-medium text-gray-700 mb-1">Field Type</Text>
                   <View className="bg-white border border-gray-300 rounded-lg px-1 py-1">
@@ -1371,7 +1606,7 @@ export default function CreateDeviceScreen() {
                     </Picker>
                   </View>
                 </View>
-                
+
                 {newFieldType === "selection" && (
                   <View className="mb-3">
                     <Text className="text-sm font-medium text-gray-700 mb-1">Options (comma separated)</Text>
@@ -1383,7 +1618,7 @@ export default function CreateDeviceScreen() {
                     />
                   </View>
                 )}
-                
+
                 <View className="mb-4 flex-row items-center">
                   <Switch
                     value={newFieldRequired}
@@ -1391,7 +1626,7 @@ export default function CreateDeviceScreen() {
                   />
                   <Text className="text-gray-700 ml-2">Required field</Text>
                 </View>
-                
+
                 <View className="flex-row">
                   <TouchableOpacity
                     className="bg-gray-500 px-4 py-2 rounded-lg mr-2"
@@ -1415,11 +1650,11 @@ export default function CreateDeviceScreen() {
               </View>
             )}
           </View>
-          
+
           <View className="h-20" />
         </ScrollView>
       </KeyboardAvoidingView>
-      
+
       {/* Barcode Scanner Modal */}
       {showScanner && (
         <Modal
@@ -1431,14 +1666,14 @@ export default function CreateDeviceScreen() {
           <SafeAreaView className="flex-1">
             <View className="flex-row justify-between items-center p-4 bg-white border-b border-gray-200">
               <Text className="text-xl font-bold text-gray-800">Scan Barcode</Text>
-              <TouchableOpacity 
+              <TouchableOpacity
                 onPress={() => setShowScanner(false)}
                 className="p-2"
               >
                 <X size={24} color="#0F172A" />
               </TouchableOpacity>
             </View>
-            
+
             <View className="flex-1">
               {hasCameraPermission === null ? (
                 <View className="flex-1 justify-center items-center">
@@ -1463,7 +1698,7 @@ export default function CreateDeviceScreen() {
                 />
               )}
             </View>
-            
+
             <View className="p-4 bg-white border-t border-gray-200">
               <Text className="text-gray-600 text-center mb-4">
                 Position the barcode in the center of the screen.
@@ -1494,7 +1729,7 @@ export default function CreateDeviceScreen() {
                 <X size={24} color="#0F172A" />
               </TouchableOpacity>
             </View>
-            
+
             <FlatList
               data={deviceModels}
               keyExtractor={(item) => item.id}
@@ -1528,4 +1763,4 @@ export default function CreateDeviceScreen() {
       </Modal>
     </SafeAreaView>
   );
-} 
+}

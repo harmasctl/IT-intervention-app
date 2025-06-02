@@ -44,7 +44,7 @@ export default function CreateTicketScreen() {
         );
       }
     };
-    
+
     setupEnvironment();
   }, []);
 
@@ -62,9 +62,12 @@ export default function CreateTicketScreen() {
       // Calculate SLA due date based on priority
       const now = new Date();
       let slaDueDate = new Date();
-      
+
       // Set SLA due time based on priority
       switch (ticketData.priority) {
+        case 'critical':
+          slaDueDate.setHours(now.getHours() + 1); // 1 hour for critical priority
+          break;
         case 'high':
           slaDueDate.setHours(now.getHours() + 4); // 4 hours for high priority
           break;
@@ -104,7 +107,7 @@ export default function CreateTicketScreen() {
       // Create notification for admins and managers
       if (data && data[0]) {
         const ticketId = data[0].id;
-        
+
         try {
           // Create notification for admins and managers
           await createNotifications(ticketId, ticketData.title, ticketData.restaurant.name);
@@ -112,7 +115,7 @@ export default function CreateTicketScreen() {
           console.error("Error creating notifications:", notifError);
           // Continue even if notifications fail
         }
-        
+
         try {
           // Update device status to 'maintenance' if it's not already
           await updateDeviceStatus(ticketData.device.id);
@@ -120,14 +123,14 @@ export default function CreateTicketScreen() {
           console.error("Error updating device status:", deviceError);
           // Continue even if device status update fails
         }
-        
+
         // Show success notification
         setSuccessMessage(`Ticket "${ticketData.title}" created successfully!`);
         setShowSuccess(true);
-        
+
         // Play success haptic feedback
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        
+
         // Navigate back after a delay
         setTimeout(() => {
           router.replace(`/tickets/${ticketId}`);
@@ -171,7 +174,7 @@ export default function CreateTicketScreen() {
 
         // Insert notifications
         const { error: notifError } = await supabase.from("notifications").insert(notifications);
-        
+
         if (notifError) {
           console.error("Error inserting notifications:", notifError);
         }
@@ -189,7 +192,7 @@ export default function CreateTicketScreen() {
         .from("devices")
         .update({ status: "maintenance" })
         .eq("id", deviceId);
-        
+
       if (error) {
         console.error("Error updating device status:", error);
       }
@@ -239,7 +242,7 @@ export default function CreateTicketScreen() {
   return (
     <SafeAreaView className="flex-1 bg-white">
       <StatusBar style="auto" />
-      
+
       <SuccessNotification
         message={successMessage}
         visible={showSuccess}
@@ -254,7 +257,7 @@ export default function CreateTicketScreen() {
           </TouchableOpacity>
           <Text className="text-xl font-bold">Create New Ticket</Text>
         </View>
-        
+
         {isSubmitting && (
           <ActivityIndicator size="small" color="#1e40af" />
         )}

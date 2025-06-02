@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import {
   Search,
   Plus,
@@ -33,6 +33,7 @@ import {
   BarChart3,
   Download,
   ArrowLeft,
+  RefreshCw,
 } from "lucide-react-native";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../components/AuthProvider";
@@ -87,11 +88,79 @@ export default function DevicesScreen() {
   const [sortBy, setSortBy] = useState<string>("name");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
-  // Load devices
+  // Load devices on mount
   useEffect(() => {
     fetchDevices();
-      fetchRestaurants();
+    fetchRestaurants();
     fetchCategories();
+  }, []);
+
+  // Refresh devices when screen comes into focus (with throttling)
+  useFocusEffect(
+    useCallback(() => {
+      const now = Date.now();
+      const lastRefresh = sessionStorage.getItem('lastDevicesRefresh');
+
+      // Only refresh if more than 5 seconds have passed since last refresh
+      if (!lastRefresh || now - parseInt(lastRefresh) > 5000) {
+        console.log("Devices screen focused - refreshing data...");
+        fetchDevices();
+        sessionStorage.setItem('lastDevicesRefresh', now.toString());
+      } else {
+        console.log("Skipping refresh - too recent");
+      }
+    }, [])
+  );
+
+  // Set up real-time subscription for devices (with error handling)
+  useEffect(() => {
+    let subscription: any = null;
+    let isSubscribed = true;
+
+    const setupSubscription = async () => {
+      try {
+        console.log("🔄 Setting up real-time subscription for devices...");
+
+        subscription = supabase
+          .channel('devices-changes-' + Date.now()) // Unique channel name
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'devices'
+            },
+            (payload) => {
+              if (!isSubscribed) return; // Prevent updates after unmount
+
+              console.log('📡 Real-time device change detected:', payload.eventType);
+
+              // Throttle real-time updates
+              setTimeout(() => {
+                if (isSubscribed) {
+                  fetchDevices();
+                }
+              }, 1000);
+            }
+          )
+          .subscribe((status) => {
+            console.log('Subscription status:', status);
+          });
+      } catch (error) {
+        console.error('Error setting up subscription:', error);
+      }
+    };
+
+    setupSubscription();
+
+    // Cleanup subscription on unmount
+    return () => {
+      isSubscribed = false;
+      if (subscription) {
+        console.log("🔄 Cleaning up real-time subscription...");
+        subscription.unsubscribe();
+      }
+    };
   }, []);
 
   // Apply filters
@@ -142,7 +211,7 @@ export default function DevicesScreen() {
         const now = new Date();
         const thirtyDaysFromNow = new Date(now);
         thirtyDaysFromNow.setDate(now.getDate() + 30);
-        
+
         filtered = filtered.filter((device) => {
           if (!device.last_maintenance || !device.category?.maintenance_interval) return false;
           const lastMaint = new Date(device.last_maintenance);
@@ -156,7 +225,7 @@ export default function DevicesScreen() {
       // Apply sorting
       filtered.sort((a, b) => {
         let comparison = 0;
-        
+
         switch (sortBy) {
           case "name":
             comparison = a.name.localeCompare(b.name);
@@ -176,7 +245,7 @@ export default function DevicesScreen() {
           default:
             comparison = 0;
         }
-        
+
         return sortOrder === "asc" ? comparison : -comparison;
       });
 
@@ -184,9 +253,20 @@ export default function DevicesScreen() {
     }
   }, [devices, searchQuery, statusFilter, categoryFilter, restaurantFilter, maintenanceFilter, sortBy, sortOrder]);
 
-  const fetchDevices = async () => {
+  const fetchDevices = async (showSuccessMessage = false) => {
     try {
-      setLoading(true);
+      // Prevent multiple simultaneous requests
+      if (loading && !refreshing) {
+        console.log("Skipping fetch - already loading");
+        return;
+      }
+
+      if (!refreshing) setLoading(true);
+
+      // Add timeout to prevent hanging requests
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
       const { data, error } = await supabase
         .from("devices")
         .select(`
@@ -194,18 +274,38 @@ export default function DevicesScreen() {
           restaurant:restaurants(name),
           category:device_categories(id, name, icon, color, maintenance_interval)
         `)
-        .order("name");
+        .order("created_at", { ascending: false })
+        .abortSignal(controller.signal);
+
+      clearTimeout(timeoutId);
 
       if (error) {
         console.error("Error fetching devices:", error);
-        Alert.alert("Error", "Failed to load devices");
+        if (error.message.includes('aborted')) {
+          Alert.alert("⏱️ Timeout", "Request took too long. Please check your connection.");
+        } else {
+          Alert.alert("❌ Error", "Failed to load devices. Please try again.");
+        }
         return;
       }
 
+      const deviceCount = data?.length || 0;
       setDevices(data || []);
-    } catch (error) {
+
+      // Show success message if requested
+      if (showSuccessMessage && deviceCount > 0) {
+        console.log(`✅ Loaded ${deviceCount} devices successfully`);
+      }
+
+      console.log(`📱 Devices refreshed: ${deviceCount} devices loaded`);
+
+    } catch (error: any) {
       console.error("Exception fetching devices:", error);
-      Alert.alert("Error", "An unexpected error occurred");
+      if (error.name === 'AbortError') {
+        Alert.alert("⏱️ Timeout", "Request was cancelled due to timeout");
+      } else {
+        Alert.alert("❌ Error", "An unexpected error occurred while loading devices");
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -249,8 +349,9 @@ export default function DevicesScreen() {
   };
 
   const onRefresh = () => {
+    console.log("🔄 Manual refresh triggered by user");
     setRefreshing(true);
-    fetchDevices();
+    fetchDevices(true); // Show success message for manual refresh
   };
 
   const resetFilters = () => {
@@ -318,7 +419,7 @@ export default function DevicesScreen() {
             />
           )}
         </View>
-        
+
         <View className="flex-1">
           <View className="flex-row justify-between items-start">
             <Text className="text-lg font-semibold text-gray-800">{item.name}</Text>
@@ -332,14 +433,14 @@ export default function DevicesScreen() {
               </Text>
             </View>
           </View>
-          
+
           <View className="mt-1">
             <Text className="text-gray-600 text-sm">{item.model || item.type}</Text>
             <Text className="text-gray-500 text-xs mt-1">
               {item.restaurant?.name || "Unassigned"}
             </Text>
           </View>
-          
+
           {maintenanceDue && (
             <View className="mt-2 bg-amber-50 px-2 py-1 rounded-md flex-row items-center">
               <AlertCircle size={14} color="#F59E0B" />
@@ -360,7 +461,7 @@ export default function DevicesScreen() {
           <Text className="text-blue-600 text-sm">Reset</Text>
         </TouchableOpacity>
       </View>
-      
+
       <View className="mb-3">
         <Text className="text-sm font-medium text-gray-700 mb-1">Status</Text>
         <View className="flex-row flex-wrap">
@@ -383,7 +484,7 @@ export default function DevicesScreen() {
           ))}
         </View>
       </View>
-      
+
       <View className="mb-3">
         <Text className="text-sm font-medium text-gray-700 mb-1">Maintenance</Text>
         <View className="flex-row flex-wrap">
@@ -429,7 +530,7 @@ export default function DevicesScreen() {
           ))}
         </ScrollView>
       </View>
-      
+
       <View className="mb-3">
         <Text className="text-sm font-medium text-gray-700 mb-1">Restaurant</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -452,7 +553,7 @@ export default function DevicesScreen() {
           ))}
         </ScrollView>
       </View>
-      
+
       <View>
         <Text className="text-sm font-medium text-gray-700 mb-1">Sort by</Text>
         <View className="flex-row flex-wrap">
@@ -501,7 +602,7 @@ export default function DevicesScreen() {
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
       <StatusBar style="dark" />
-      
+
       <View className="flex-1 px-4 pt-4">
         <View className="flex-row justify-between items-center p-4 border-b border-gray-200 bg-white">
           <View className="flex-row items-center">
@@ -512,6 +613,26 @@ export default function DevicesScreen() {
           </View>
 
           <View className="flex-row">
+            <TouchableOpacity
+              className="bg-gray-100 p-2 rounded-lg mr-2"
+              onPress={() => {
+                onRefresh();
+                Alert.alert("🔄 Refreshing", "Loading latest devices...");
+              }}
+            >
+              <RefreshCw size={20} color="#4B5563" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              className="bg-gray-100 p-2 rounded-lg mr-2"
+              onPress={() => {
+                router.push("/devices/import");
+                Alert.alert("📥 Bulk Import", "Opening bulk device import tool...");
+              }}
+            >
+              <Download size={20} color="#4B5563" />
+            </TouchableOpacity>
+
             <TouchableOpacity
               className="bg-gray-100 p-2 rounded-lg mr-2"
               onPress={() => router.push("/devices/models")}
@@ -553,7 +674,7 @@ export default function DevicesScreen() {
             <Filter size={24} color={showFilters ? "#3B82F6" : "#6B7280"} />
           </TouchableOpacity>
         </View>
-        
+
         <View className="flex-row justify-between items-center mb-4">
           <View className="flex-row space-x-1">
             <TouchableOpacity
@@ -588,7 +709,7 @@ export default function DevicesScreen() {
             </TouchableOpacity>
           </View>
         </View>
-        
+
         {showFilters && renderFilters()}
 
             {loading ? (

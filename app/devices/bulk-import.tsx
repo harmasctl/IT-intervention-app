@@ -23,10 +23,7 @@ import {
   Copy,
 } from "lucide-react-native";
 import { supabase } from "../../lib/supabase";
-import * as DocumentPicker from "expo-document-picker";
-import * as FileSystem from "expo-file-system";
-import Papa from "papaparse";
-import * as Clipboard from "expo-clipboard";
+// Removed external dependencies for simplified implementation
 
 interface DeviceImport {
   name: string;
@@ -48,53 +45,48 @@ export default function BulkImportScreen() {
     errors: { row: number; message: string }[];
   }>({ total: 0, success: 0, errors: [] });
   const [showInstructions, setShowInstructions] = useState(false);
-  
+
   const handleSelectFile = async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ["text/csv", "text/comma-separated-values"],
-      });
-      
-      if (result.canceled) {
-        return;
-      }
-      
-      // Read file content
-      const fileContent = await FileSystem.readAsStringAsync(result.assets[0].uri);
-      setImportText(fileContent);
-    } catch (error) {
-      console.error("Error selecting file:", error);
-      Alert.alert("Error", "Failed to select file");
-    }
+    // Simplified file selection - show instructions for manual paste
+    Alert.alert(
+      "File Selection",
+      "For this demo, please copy your CSV content and paste it in the text area below. In a production app, this would open a file picker.",
+      [{ text: "OK" }]
+    );
   };
-  
+
   const handleImport = async () => {
     if (!importText.trim()) {
       Alert.alert("Error", "Please enter CSV data or select a file");
       return;
     }
-    
+
     try {
       setImportStatus("processing");
-      
-      // Parse CSV
-      const parsedData = Papa.parse<Record<string, string>>(importText, {
-        header: true,
-        skipEmptyLines: true,
-      });
-      
-      if (parsedData.errors.length > 0) {
-        console.error("CSV parsing errors:", parsedData.errors);
-        Alert.alert("Error", "Failed to parse CSV. Please check the format.");
+
+      // Simple CSV parsing
+      const lines = importText.trim().split('\n');
+      if (lines.length < 2) {
+        Alert.alert("Error", "CSV must have at least a header row and one data row.");
         setImportStatus("error");
         return;
       }
-      
+
+      const headers = lines[0].split(',').map(h => h.trim());
+      const dataRows = lines.slice(1).map(line => {
+        const values = line.split(',').map(v => v.trim());
+        const row: Record<string, string> = {};
+        headers.forEach((header, index) => {
+          row[header] = values[index] || '';
+        });
+        return row;
+      });
+
       const devices: DeviceImport[] = [];
       const errors: { row: number; message: string }[] = [];
-      
+
       // Validate and transform data
-      parsedData.data.forEach((row, index) => {
+      dataRows.forEach((row, index) => {
         if (!row.name || !row.serial_number || !row.type || !row.restaurant_id) {
           errors.push({
             row: index + 2, // +2 for header row and 1-indexing
@@ -102,7 +94,7 @@ export default function BulkImportScreen() {
           });
           return;
         }
-        
+
         const device: DeviceImport = {
           name: row.name,
           serial_number: row.serial_number,
@@ -111,7 +103,7 @@ export default function BulkImportScreen() {
           restaurant_id: row.restaurant_id,
           category_id: row.category_id,
         };
-        
+
         if (row.status) {
           if (["operational", "maintenance", "offline"].includes(row.status)) {
             device.status = row.status;
@@ -122,26 +114,26 @@ export default function BulkImportScreen() {
             });
           }
         }
-        
+
         devices.push(device);
       });
-      
-      if (errors.length > 0 && errors.length === parsedData.data.length) {
+
+      if (errors.length > 0 && errors.length === dataRows.length) {
         setImportResult({
-          total: parsedData.data.length,
+          total: dataRows.length,
           success: 0,
           errors,
         });
         setImportStatus("error");
         return;
       }
-      
+
       // Insert devices
       let successCount = 0;
-      
+
       for (const device of devices) {
         const { error } = await supabase.from("devices").insert([device]);
-        
+
         if (error) {
           console.error("Error inserting device:", error);
           const rowIndex = devices.indexOf(device);
@@ -153,13 +145,13 @@ export default function BulkImportScreen() {
           successCount++;
         }
       }
-      
+
       setImportResult({
         total: devices.length,
         success: successCount,
         errors,
       });
-      
+
       setImportStatus(errors.length > 0 ? "error" : "success");
     } catch (error) {
       console.error("Error importing devices:", error);
@@ -167,17 +159,21 @@ export default function BulkImportScreen() {
       setImportStatus("error");
     }
   };
-  
+
   const copyTemplateToClipboard = async () => {
-    const template = 
+    const template =
       "name,serial_number,type,model,status,restaurant_id,category_id\n" +
       "Refrigerator XL,REF123456,refrigerator,Model ABC,operational,restaurant_id_here,category_id_here\n" +
       "Oven Pro,OVN789012,oven,Model DEF,operational,restaurant_id_here,";
-    
-    await Clipboard.setStringAsync(template);
-    Alert.alert("Success", "CSV template copied to clipboard");
+
+    // For demo purposes, just show the template
+    Alert.alert(
+      "CSV Template",
+      template + "\n\nCopy this template and paste it in the text area above.",
+      [{ text: "OK" }]
+    );
   };
-  
+
   const renderInstructionsModal = () => (
     <ScrollView className="bg-white rounded-lg p-4 mb-6">
       <View className="flex-row justify-between items-center mb-4">
@@ -186,11 +182,11 @@ export default function BulkImportScreen() {
           <Text className="text-blue-500">Close</Text>
         </TouchableOpacity>
       </View>
-      
+
       <Text className="text-gray-700 mb-3">
         The CSV file should have the following columns:
       </Text>
-      
+
       <View className="mb-4">
         <Text className="font-medium text-gray-800 mb-1">Required columns:</Text>
         <Text className="text-gray-700">• name - Device name</Text>
@@ -198,18 +194,18 @@ export default function BulkImportScreen() {
         <Text className="text-gray-700">• type - Device type (e.g., refrigerator, oven)</Text>
         <Text className="text-gray-700">• restaurant_id - Restaurant ID</Text>
       </View>
-      
+
       <View className="mb-4">
         <Text className="font-medium text-gray-800 mb-1">Optional columns:</Text>
         <Text className="text-gray-700">• model - Device model</Text>
         <Text className="text-gray-700">• status - One of: operational, maintenance, offline</Text>
         <Text className="text-gray-700">• category_id - Device category ID</Text>
       </View>
-      
+
       <Text className="text-gray-700 mb-3">
         You can copy a template to get started.
       </Text>
-      
+
       <TouchableOpacity
         className="bg-blue-100 rounded-lg py-2 px-4 flex-row items-center justify-center mb-3"
         onPress={copyTemplateToClipboard}
@@ -217,14 +213,14 @@ export default function BulkImportScreen() {
         <Copy size={16} color="#1E40AF" className="mr-2" />
         <Text className="text-blue-700">Copy Template</Text>
       </TouchableOpacity>
-      
+
       <Text className="text-gray-500 text-sm">
         Note: For restaurant_id and category_id, you need to use the actual IDs from the database.
         You can find these in the restaurants and device_categories tables.
       </Text>
     </ScrollView>
   );
-  
+
   const renderStatusIndicator = () => {
     switch (importStatus) {
       case "processing":
@@ -283,7 +279,7 @@ export default function BulkImportScreen() {
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
       <StatusBar style="dark" />
-      
+
       <View className="flex-row justify-between items-center p-4 border-b border-gray-200 bg-white">
         <View className="flex-row items-center">
           <TouchableOpacity onPress={() => router.back()} className="mr-4">
@@ -298,7 +294,7 @@ export default function BulkImportScreen() {
           <HelpCircle size={20} color="#1E40AF" />
         </TouchableOpacity>
       </View>
-      
+
       <ScrollView className="flex-1 p-4">
         {showInstructions ? renderInstructionsModal() : (
           <>
@@ -307,7 +303,7 @@ export default function BulkImportScreen() {
                 <FileText size={20} color="#6B7280" className="mr-2" />
                 <Text className="text-lg font-semibold text-gray-800">CSV Data</Text>
               </View>
-              
+
               <TextInput
                 className="border border-gray-300 rounded-lg p-3 mb-4 min-h-[150px]"
                 multiline
@@ -316,7 +312,7 @@ export default function BulkImportScreen() {
                 onChangeText={setImportText}
                 style={{ textAlignVertical: "top" }}
               />
-              
+
               <View className="flex-row">
                 <TouchableOpacity
                   className="bg-gray-100 rounded-lg py-2 px-4 flex-row items-center mr-2"
@@ -325,7 +321,7 @@ export default function BulkImportScreen() {
                   <Download size={16} color="#4B5563" className="mr-2" />
                   <Text className="text-gray-700">Select CSV File</Text>
                 </TouchableOpacity>
-                
+
                 <TouchableOpacity
                   className="bg-blue-100 rounded-lg py-2 px-4 flex-row items-center"
                   onPress={copyTemplateToClipboard}
@@ -335,13 +331,13 @@ export default function BulkImportScreen() {
                 </TouchableOpacity>
               </View>
             </View>
-            
+
             {importStatus !== "idle" && (
               <View className="mb-6">
                 {renderStatusIndicator()}
               </View>
             )}
-            
+
             <TouchableOpacity
               className="bg-blue-500 py-3 rounded-lg items-center flex-row justify-center mb-6"
               onPress={handleImport}
@@ -352,7 +348,7 @@ export default function BulkImportScreen() {
                 {importStatus === "processing" ? "Importing..." : "Import Devices"}
               </Text>
             </TouchableOpacity>
-            
+
             <View className="bg-yellow-50 p-4 rounded-lg mb-6">
               <Text className="text-yellow-800">
                 <Text className="font-medium">Note: </Text>

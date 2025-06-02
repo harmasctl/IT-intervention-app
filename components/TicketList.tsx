@@ -16,6 +16,7 @@ import {
   CheckCircle,
   ChevronRight,
   Search,
+  MapPin,
 } from "lucide-react-native";
 
 type Priority = "low" | "medium" | "high";
@@ -131,86 +132,112 @@ const TicketList = ({ onTicketPress = () => {} }: TicketListProps) => {
 
   const renderTicketItem = ({ item }: { item: Ticket }) => (
     <TouchableOpacity
-      className="bg-white rounded-lg p-4 mb-3 shadow-sm border border-gray-100"
+      className="bg-white rounded-2xl p-6 mb-4 shadow-xl border border-gray-100 transform transition-transform active:scale-98"
       onPress={() => handleTicketPress(item.id)}
     >
-      <View className="flex-row justify-between items-start">
+      <View className="flex-row justify-between items-start mb-4">
         <View className="flex-1">
-          <View className="flex-row items-center mb-1">
+          <View className="flex-row items-center mb-3">
             <View
-              className={`w-3 h-3 rounded-full mr-2 ${getPriorityColor(item.priority)}`}
+              className={`w-4 h-4 rounded-full mr-3 shadow-sm ${getPriorityColor(item.priority)}`}
             />
-            <Text className="font-bold text-lg text-gray-800">
+            <Text className="font-bold text-xl text-gray-800 flex-1">
               {item.title}
             </Text>
           </View>
-          <Text className="text-gray-600 mb-1">{item.restaurantName}</Text>
-          <Text className="text-gray-500 text-sm mb-2">
-            {item.deviceAffected}
-          </Text>
+
+          <View className="bg-gray-50 rounded-xl p-3 mb-3">
+            <View className="flex-row items-center mb-1">
+              <MapPin size={16} color="#6B7280" />
+              <Text className="text-gray-700 font-medium ml-2">{item.restaurantName}</Text>
+            </View>
+            <Text className="text-gray-600 text-sm ml-6">
+              {item.deviceAffected}
+            </Text>
+          </View>
 
           <View className="flex-row items-center">
-            {getStatusIcon(item.status)}
-            <Text className="ml-1 text-xs text-gray-500 capitalize">
-              {item.status}
-            </Text>
+            <View className="bg-blue-50 rounded-xl px-3 py-2 flex-row items-center">
+              {getStatusIcon(item.status)}
+              <Text className="ml-2 text-sm text-blue-700 font-medium capitalize">
+                {item.status}
+              </Text>
+            </View>
           </View>
         </View>
 
-        <View className="flex-row items-center">
+        <View className="items-end ml-4">
           {item.assignedTo ? (
-            <View className="flex-row items-center mr-2">
+            <View className="items-center">
               <Image
                 source={{
                   uri: `https://api.dicebear.com/7.x/avataaars/svg?seed=${item.assignedTo}`,
                 }}
-                style={{ width: 24, height: 24, borderRadius: 12 }}
+                style={{ width: 40, height: 40, borderRadius: 20 }}
+                className="shadow-md border-2 border-white"
               />
-              <Text className="ml-1 text-xs text-gray-500">
+              <Text className="mt-2 text-xs text-gray-600 font-medium text-center">
                 {item.assignedTo}
               </Text>
             </View>
           ) : (
-            <Text className="text-xs text-gray-400 italic mr-2">
-              Unassigned
-            </Text>
+            <View className="bg-gray-100 rounded-xl px-4 py-2">
+              <Text className="text-sm text-gray-500 font-medium">
+                Unassigned
+              </Text>
+            </View>
           )}
-          <ChevronRight size={16} color="#9ca3af" />
+          <View className="mt-3 bg-indigo-100 p-2 rounded-xl">
+            <ChevronRight size={20} color="#6366f1" />
+          </View>
         </View>
       </View>
     </TouchableOpacity>
   );
 
   return (
-    <View className="flex-1 bg-gray-50 p-4">
-      {/* Search bar */}
-      <View className="bg-white rounded-lg px-4 py-2 mb-4 flex-row items-center shadow-sm">
-        <Search size={20} color="#6b7280" />
+    <View className="flex-1 bg-gradient-to-b from-gray-50 to-white p-6">
+      {/* Enhanced Search bar */}
+      <View className="bg-white rounded-2xl px-6 py-4 mb-6 flex-row items-center shadow-lg border border-gray-100">
+        <View className="bg-blue-100 p-2 rounded-xl mr-3">
+          <Search size={20} color="#3b82f6" />
+        </View>
         <TextInput
-          className="flex-1 ml-2 py-1"
-          placeholder="Search tickets..."
+          className="flex-1 text-base"
+          placeholder="Search tickets, restaurants, devices..."
+          placeholderTextColor="#9ca3af"
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
       </View>
 
-      {/* Filter tabs */}
-      <View className="flex-row bg-white rounded-lg mb-4 p-1 shadow-sm">
-        {["all", "new", "in-progress", "resolved"].map((filter) => (
-          <TouchableOpacity
-            key={filter}
-            className={`flex-1 py-2 px-3 rounded-md ${activeFilter === filter ? "bg-blue-100" : ""}`}
-            onPress={() => setActiveFilter(filter as Status | "all")}
-          >
-            <Text
-              className={`text-center text-sm ${activeFilter === filter ? "text-blue-600 font-medium" : "text-gray-600"}`}
+      {/* Enhanced Filter tabs */}
+      <View className="bg-white rounded-2xl mb-6 p-2 shadow-lg border border-gray-100">
+        <View className="flex-row">
+          {["all", "new", "in-progress", "resolved"].map((filter) => (
+            <TouchableOpacity
+              key={filter}
+              className={`flex-1 py-3 px-4 rounded-xl mx-1 ${
+                activeFilter === filter
+                  ? "bg-gradient-to-r from-blue-500 to-indigo-600 shadow-md"
+                  : "bg-transparent"
+              }`}
+              onPress={() => setActiveFilter(filter as Status | "all")}
             >
-              {filter === "all"
-                ? "All"
-                : filter.charAt(0).toUpperCase() + filter.slice(1)}
-            </Text>
-          </TouchableOpacity>
-        ))}
+              <Text
+                className={`text-center text-sm font-medium ${
+                  activeFilter === filter
+                    ? "text-white"
+                    : "text-gray-600"
+                }`}
+              >
+                {filter === "all"
+                  ? "All"
+                  : filter.charAt(0).toUpperCase() + filter.slice(1)}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
       </View>
 
       {/* Ticket list */}

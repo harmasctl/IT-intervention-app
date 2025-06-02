@@ -23,11 +23,14 @@ export default function NotificationBadge({
     >
       <Bell size={size} color={color} />
       {unreadCount > 0 && (
-        <View className="absolute -top-1 -right-1 bg-red-500 rounded-full min-w-[16px] h-4 items-center justify-center px-1">
+        <View className="absolute -top-2 -right-2 bg-gradient-to-r from-red-500 to-pink-600 rounded-full min-w-[20px] h-5 items-center justify-center px-1 shadow-lg border-2 border-white">
           <Text className="text-white text-xs font-bold">
-            {unreadCount > 9 ? "9+" : unreadCount}
+            {unreadCount > 99 ? "99+" : unreadCount}
           </Text>
         </View>
+      )}
+      {unreadCount > 0 && (
+        <View className="absolute -top-1 -right-1 w-3 h-3 bg-red-400 rounded-full animate-pulse opacity-75" />
       )}
     </TouchableOpacity>
   );

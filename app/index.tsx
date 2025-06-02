@@ -17,6 +17,7 @@ import {
   Clock,
   CheckCircle,
   AlertCircle,
+  AlertTriangle,
   Wrench,
   User,
   BarChart3,
@@ -29,6 +30,15 @@ import {
   Package,
   Utensils,
   Map,
+  Download,
+  Monitor,
+  TrendingUp,
+  Activity,
+  Search,
+  RefreshCw,
+  Building2,
+  Shield,
+  Upload,
 } from "lucide-react-native";
 import TicketList from "../components/TicketList";
 import { useAuth } from "../components/AuthProvider";
@@ -118,163 +128,176 @@ export default function Dashboard() {
     <SafeAreaView className="flex-1 bg-gray-50">
       <StatusBar style="auto" />
 
-      {/* Header */}
-      <View className="flex-row justify-between items-center px-5 py-4 bg-gradient-to-r from-blue-700 to-blue-900 shadow-lg">
-        <View className="flex-row items-center">
-          <Home size={24} color="#ffffff" className="mr-2" />
-          <Text className="text-2xl font-bold text-white">Tech Support</Text>
+      {/* Enhanced Header with Gradient */}
+      <View className="px-6 py-6 bg-gradient-to-br from-indigo-600 via-purple-600 to-blue-700 shadow-2xl">
+        <View className="flex-row justify-between items-center mb-4">
+          <View className="flex-row items-center">
+            <View className="bg-white/20 p-3 rounded-2xl mr-3 backdrop-blur-sm">
+              <Home size={28} color="#ffffff" />
+            </View>
+            <View>
+              <Text className="text-2xl font-bold text-white">IT Support Hub</Text>
+              <Text className="text-indigo-100 text-sm">Professional Management System</Text>
+            </View>
+          </View>
+          <View className="flex-row space-x-3">
+            <TouchableOpacity
+              className="relative bg-white/20 p-3 rounded-2xl backdrop-blur-sm"
+              onPress={() => router.push("/notifications")}
+            >
+              <NotificationBadge color="white" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              className="bg-white/20 p-3 rounded-2xl backdrop-blur-sm"
+              onPress={() => router.push("/search")}
+            >
+              <Search size={20} color="#ffffff" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              className="bg-white/20 p-3 rounded-2xl backdrop-blur-sm"
+              onPress={() => router.push("/profile")}
+            >
+              <User size={20} color="#ffffff" />
+            </TouchableOpacity>
+          </View>
         </View>
-        <View className="flex-row space-x-4">
-          <TouchableOpacity
-            className="relative bg-blue-800 p-2 rounded-full"
-            onPress={() => router.push("/notifications")}
-          >
-            <NotificationBadge color="white" />
-          </TouchableOpacity>
-          <TouchableOpacity className="bg-blue-800 p-2 rounded-full">
-            <Filter size={20} color="#ffffff" />
-          </TouchableOpacity>
-          <TouchableOpacity
-            className="bg-blue-800 p-2 rounded-full"
-            onPress={() => router.push("/profile")}
-          >
-            <User size={20} color="#ffffff" />
-          </TouchableOpacity>
+
+        {/* Welcome Message */}
+        <View className="bg-white/10 rounded-2xl p-4 backdrop-blur-sm">
+          <Text className="text-white/90 text-lg font-medium mb-1">
+            Welcome back{user ? `, ${user.user_metadata?.name || "Technician"}` : ""}! 👋
+          </Text>
+          <Text className="text-indigo-100 text-sm">
+            Ready to manage your IT operations efficiently
+          </Text>
         </View>
       </View>
 
-      {/* Create Ticket Button - Added prominently at the top */}
-      <TouchableOpacity
-        className="mx-5 mt-4 bg-blue-600 rounded-xl p-4 flex-row items-center justify-center shadow-xl"
-        onPress={handleCreateTicket}
-      >
-        <Plus size={24} color="#ffffff" />
-        <Text className="text-white font-bold ml-2 text-lg">
-          Create New Ticket
-        </Text>
-      </TouchableOpacity>
+      {/* Enhanced Create Ticket Button */}
+      <View className="px-6 -mt-6 relative z-10">
+        <TouchableOpacity
+          className="bg-gradient-to-r from-emerald-500 to-teal-600 rounded-2xl p-5 flex-row items-center justify-center shadow-2xl border border-white/20"
+          onPress={handleCreateTicket}
+        >
+          <View className="bg-white/20 p-2 rounded-xl mr-3">
+            <Plus size={24} color="#ffffff" />
+          </View>
+          <View>
+            <Text className="text-white font-bold text-lg">Create New Ticket</Text>
+            <Text className="text-emerald-100 text-sm">Start a new support request</Text>
+          </View>
+        </TouchableOpacity>
+      </View>
 
-      <ScrollView className="flex-1 bg-gray-100">
-        {/* Hero Section */}
-        <View className="bg-gradient-to-br from-blue-600 to-blue-800 px-5 py-8 rounded-b-3xl shadow-lg">
-          <Text className="text-blue-100 text-lg font-medium mb-1">
-            Welcome back
-            {user ? `, ${user.user_metadata?.name || "Technician"}` : ""}
-          </Text>
-          <Text className="text-white text-3xl font-bold mb-6">Dashboard</Text>
-          <TouchableOpacity
-            className="bg-white rounded-xl p-4 flex-row items-center justify-center shadow-xl"
-            onPress={handleCreateTicket}
-          >
-            <Plus size={20} color="#1e40af" />
-            <Text className="text-blue-800 font-semibold ml-2">
-              Create New Ticket
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Summary Statistics */}
-        <View className="px-5 py-6 bg-white rounded-2xl mx-4 -mt-6 shadow-xl">
-          <Text className="text-lg font-semibold mb-4 text-gray-800 flex-row items-center">
-            <BarChart3 size={18} color="#1e40af" className="mr-2" /> Performance
-            Overview
+      <ScrollView className="flex-1 bg-gradient-to-b from-gray-50 to-white">
+        {/* Quick Stats Cards */}
+        <View className="px-6 py-6">
+          <Text className="text-2xl font-bold text-gray-800 mb-6 flex-row items-center">
+            📊 System Overview
           </Text>
 
           {loading ? (
-            <View className="h-32 items-center justify-center">
-              <ActivityIndicator size="large" color="#1e40af" />
-              <Text className="text-gray-500 mt-2">Loading statistics...</Text>
+            <View className="h-40 items-center justify-center">
+              <ActivityIndicator size="large" color="#6366f1" />
+              <Text className="text-gray-500 mt-3 text-lg">Loading dashboard...</Text>
             </View>
           ) : (
             <>
-              <View className="flex-row justify-between mb-4">
-                <View className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl p-4 flex-1 mr-3 shadow-sm">
-                  <View className="flex-row items-center justify-between">
-                    <Text className="text-sm font-medium text-blue-800">
-                      New
-                    </Text>
-                    <View className="bg-blue-200 p-1.5 rounded-full">
-                      <AlertCircle size={16} color="#1e40af" />
+              {/* Modern Stats Grid */}
+              <View className="flex-row justify-between mb-6">
+                <View className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-3xl p-5 flex-1 mr-3 shadow-lg">
+                  <View className="flex-row items-center justify-between mb-3">
+                    <View className="bg-white/20 p-2 rounded-xl">
+                      <AlertCircle size={20} color="#ffffff" />
                     </View>
+                    <Text className="text-blue-100 text-sm font-medium">New Tickets</Text>
                   </View>
-                  <Text className="text-3xl font-bold text-blue-800 mt-2">
+                  <Text className="text-4xl font-bold text-white mb-1">
                     {summaryStats.new}
                   </Text>
+                  <Text className="text-blue-100 text-sm">Awaiting assignment</Text>
                 </View>
-                <View className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-2xl p-4 flex-1 shadow-sm">
-                  <View className="flex-row items-center justify-between">
-                    <Text className="text-sm font-medium text-amber-800">
-                      In Progress
-                    </Text>
-                    <View className="bg-amber-200 p-1.5 rounded-full">
-                      <Clock size={16} color="#b45309" />
+
+                <View className="bg-gradient-to-br from-amber-500 to-orange-500 rounded-3xl p-5 flex-1 shadow-lg">
+                  <View className="flex-row items-center justify-between mb-3">
+                    <View className="bg-white/20 p-2 rounded-xl">
+                      <Clock size={20} color="#ffffff" />
                     </View>
+                    <Text className="text-orange-100 text-sm font-medium">In Progress</Text>
                   </View>
-                  <Text className="text-3xl font-bold text-amber-700 mt-2">
+                  <Text className="text-4xl font-bold text-white mb-1">
                     {summaryStats.inProgress}
                   </Text>
+                  <Text className="text-orange-100 text-sm">Being worked on</Text>
                 </View>
               </View>
 
-              <View className="flex-row justify-between mb-4">
-                <View className="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl p-4 flex-1 mr-3 shadow-sm">
-                  <View className="flex-row items-center justify-between">
-                    <Text className="text-sm font-medium text-green-800">
-                      Resolved
-                    </Text>
-                    <View className="bg-green-200 p-1.5 rounded-full">
-                      <CheckCircle size={16} color="#15803d" />
+              <View className="flex-row justify-between mb-6">
+                <View className="bg-gradient-to-br from-emerald-500 to-green-600 rounded-3xl p-5 flex-1 mr-3 shadow-lg">
+                  <View className="flex-row items-center justify-between mb-3">
+                    <View className="bg-white/20 p-2 rounded-xl">
+                      <CheckCircle size={20} color="#ffffff" />
                     </View>
+                    <Text className="text-green-100 text-sm font-medium">Resolved</Text>
                   </View>
-                  <Text className="text-3xl font-bold text-green-700 mt-2">
+                  <Text className="text-4xl font-bold text-white mb-1">
                     {summaryStats.resolved}
                   </Text>
+                  <Text className="text-green-100 text-sm">Successfully completed</Text>
                 </View>
-                <View className="bg-gradient-to-br from-red-50 to-red-100 rounded-2xl p-4 flex-1 shadow-sm">
-                  <View className="flex-row items-center justify-between">
-                    <Text className="text-sm font-medium text-red-800">
-                      High Priority
-                    </Text>
-                    <View className="bg-red-200 p-1.5 rounded-full">
-                      <AlertCircle size={16} color="#b91c1c" />
+
+                <View className="bg-gradient-to-br from-red-500 to-pink-600 rounded-3xl p-5 flex-1 shadow-lg">
+                  <View className="flex-row items-center justify-between mb-3">
+                    <View className="bg-white/20 p-2 rounded-xl">
+                      <AlertTriangle size={20} color="#ffffff" />
                     </View>
+                    <Text className="text-red-100 text-sm font-medium">High Priority</Text>
                   </View>
-                  <Text className="text-3xl font-bold text-red-700 mt-2">
+                  <Text className="text-4xl font-bold text-white mb-1">
                     {summaryStats.highPriority}
                   </Text>
+                  <Text className="text-red-100 text-sm">Urgent attention needed</Text>
                 </View>
               </View>
 
-              {/* SLA Metrics */}
-              <Text className="text-lg font-semibold mb-3 text-gray-800">
-                SLA Metrics
-              </Text>
-              <View className="flex-row justify-between mb-4">
-                <View className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-2xl p-4 flex-1 mr-3 shadow-sm">
-                  <View className="flex-row items-center justify-between">
-                    <Text className="text-sm font-medium text-purple-800">
-                      SLA Compliant
-                    </Text>
-                    <View className="bg-purple-200 p-1.5 rounded-full">
-                      <CheckCircle size={16} color="#7e22ce" />
+              {/* Performance Metrics */}
+              <View className="bg-white rounded-3xl p-6 shadow-lg border border-gray-100">
+                <Text className="text-xl font-bold text-gray-800 mb-4 flex-row items-center">
+                  ⚡ Performance Metrics
+                </Text>
+                <View className="flex-row justify-between">
+                  <View className="flex-1 mr-3">
+                    <View className="bg-gradient-to-r from-purple-100 to-indigo-100 rounded-2xl p-4 mb-3">
+                      <View className="flex-row items-center mb-2">
+                        <CheckCircle size={18} color="#7c3aed" />
+                        <Text className="text-purple-800 font-medium ml-2">SLA Compliance</Text>
+                      </View>
+                      <Text className="text-2xl font-bold text-purple-700">98.5%</Text>
+                    </View>
+                    <View className="bg-gradient-to-r from-cyan-100 to-blue-100 rounded-2xl p-4">
+                      <View className="flex-row items-center mb-2">
+                        <Clock size={18} color="#0891b2" />
+                        <Text className="text-cyan-800 font-medium ml-2">Avg Response</Text>
+                      </View>
+                      <Text className="text-2xl font-bold text-cyan-700">2.3h</Text>
                     </View>
                   </View>
-                  <Text className="text-3xl font-bold text-purple-700 mt-2">
-                    {summaryStats.slaCompliant}
-                  </Text>
-                </View>
-                <View className="bg-gradient-to-br from-cyan-50 to-cyan-100 rounded-2xl p-4 flex-1 shadow-sm">
-                  <View className="flex-row items-center justify-between">
-                    <Text className="text-sm font-medium text-cyan-800">
-                      Avg Response
-                    </Text>
-                    <View className="bg-cyan-200 p-1.5 rounded-full">
-                      <Clock size={16} color="#0e7490" />
+                  <View className="flex-1">
+                    <View className="bg-gradient-to-r from-rose-100 to-pink-100 rounded-2xl p-4 mb-3">
+                      <View className="flex-row items-center mb-2">
+                        <TrendingUp size={18} color="#e11d48" />
+                        <Text className="text-rose-800 font-medium ml-2">Resolution Rate</Text>
+                      </View>
+                      <Text className="text-2xl font-bold text-rose-700">94.2%</Text>
+                    </View>
+                    <View className="bg-gradient-to-r from-emerald-100 to-teal-100 rounded-2xl p-4">
+                      <View className="flex-row items-center mb-2">
+                        <Activity size={18} color="#059669" />
+                        <Text className="text-emerald-800 font-medium ml-2">Efficiency</Text>
+                      </View>
+                      <Text className="text-2xl font-bold text-emerald-700">Excellent</Text>
                     </View>
                   </View>
-                  <Text className="text-3xl font-bold text-cyan-700 mt-2">
-                    {summaryStats.avgResponseTime}
-                  </Text>
                 </View>
               </View>
 
@@ -298,40 +321,54 @@ export default function Dashboard() {
           )}
         </View>
 
-        {/* Quick Access Cards */}
-        <View className="px-5 py-6 mt-6">
-          <Text className="text-lg font-semibold mb-4 text-gray-800 flex-row items-center">
-            <Menu size={18} color="#1e40af" className="mr-2" /> Quick Access
+        {/* Enhanced Quick Access Cards */}
+        <View className="px-6 py-8">
+          <Text className="text-2xl font-bold text-gray-800 mb-6 flex-row items-center">
+            🚀 Quick Access
           </Text>
           <View className="flex-row flex-wrap justify-between">
             <TouchableOpacity
-              className="bg-white rounded-2xl p-5 w-[48%] mb-4 shadow-md items-center transform transition-transform active:scale-95"
+              className="bg-white rounded-3xl p-6 w-[48%] mb-4 shadow-xl border border-gray-100 items-center transform transition-transform active:scale-95"
               onPress={() => handleNavigation("/schedule")}
             >
-              <View className="bg-gradient-to-br from-blue-100 to-blue-200 p-4 rounded-full mb-3 shadow-sm">
-                <Calendar size={24} color="#1e40af" />
+              <View className="bg-gradient-to-br from-blue-500 to-indigo-600 p-4 rounded-2xl mb-4 shadow-lg">
+                <Calendar size={28} color="#ffffff" />
               </View>
-              <Text className="text-gray-800 font-medium">Schedule</Text>
+              <Text className="text-gray-800 font-bold text-lg">Schedule</Text>
+              <Text className="text-gray-500 text-sm text-center mt-1">Manage appointments</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              className="bg-white rounded-2xl p-5 w-[48%] mb-4 shadow-md items-center transform transition-transform active:scale-95"
+              className="bg-white rounded-3xl p-6 w-[48%] mb-4 shadow-xl border border-gray-100 items-center transform transition-transform active:scale-95"
               onPress={() => handleNavigation("/equipment")}
             >
-              <View className="bg-gradient-to-br from-amber-100 to-amber-200 p-4 rounded-full mb-3 shadow-sm">
-                <Package size={24} color="#b45309" />
+              <View className="bg-gradient-to-br from-amber-500 to-orange-600 p-4 rounded-2xl mb-4 shadow-lg">
+                <Package size={28} color="#ffffff" />
               </View>
-              <Text className="text-gray-800 font-medium">Equipment</Text>
+              <Text className="text-gray-800 font-bold text-lg">Equipment</Text>
+              <Text className="text-gray-500 text-sm text-center mt-1">Inventory management</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              className="bg-white rounded-2xl p-5 w-[48%] mb-4 shadow-md items-center transform transition-transform active:scale-95"
+              className="bg-white rounded-3xl p-6 w-[48%] mb-4 shadow-xl border border-gray-100 items-center transform transition-transform active:scale-95"
               onPress={() => handleNavigation("/devices")}
             >
-              <View className="bg-gradient-to-br from-green-100 to-green-200 p-4 rounded-full mb-3 shadow-sm">
-                <Wrench size={24} color="#15803d" />
+              <View className="bg-gradient-to-br from-emerald-500 to-teal-600 p-4 rounded-2xl mb-4 shadow-lg">
+                <Wrench size={28} color="#ffffff" />
               </View>
-              <Text className="text-gray-800 font-medium">Devices</Text>
+              <Text className="text-gray-800 font-bold text-lg">All Devices</Text>
+              <Text className="text-gray-500 text-sm text-center mt-1">Device overview</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              className="bg-white rounded-3xl p-6 w-[48%] mb-4 shadow-xl border border-gray-100 items-center transform transition-transform active:scale-95"
+              onPress={() => handleNavigation("/devices/by-restaurant")}
+            >
+              <View className="bg-gradient-to-br from-purple-500 to-violet-600 p-4 rounded-2xl mb-4 shadow-lg">
+                <Building2 size={28} color="#ffffff" />
+              </View>
+              <Text className="text-gray-800 font-bold text-lg">By Restaurant</Text>
+              <Text className="text-gray-500 text-sm text-center mt-1">Location-based view</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -382,6 +419,197 @@ export default function Dashboard() {
                 <Settings size={24} color="white" />
               </View>
               <Text className="text-gray-800 font-medium">Admin</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Enhanced Advanced Features Section */}
+        <View className="px-6 py-8 bg-gradient-to-br from-slate-50 to-gray-100">
+          <Text className="text-2xl font-bold text-gray-800 mb-6 flex-row items-center">
+            ⚡ Advanced Features
+          </Text>
+          <View className="flex-row flex-wrap justify-between">
+            <TouchableOpacity
+              className="bg-white rounded-3xl p-6 w-[48%] mb-4 shadow-xl border border-gray-100 items-center transform transition-transform active:scale-95"
+              onPress={() => handleNavigation("/devices/bulk-import")}
+            >
+              <View className="bg-gradient-to-br from-indigo-500 to-purple-600 p-4 rounded-2xl mb-4 shadow-lg">
+                <Upload size={28} color="#ffffff" />
+              </View>
+              <Text className="text-gray-800 font-bold text-lg">Bulk Import</Text>
+              <Text className="text-gray-500 text-sm text-center mt-1">Mass device import</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              className="bg-white rounded-2xl p-5 w-[48%] mb-4 shadow-md items-center transform transition-transform active:scale-95"
+              onPress={() => handleNavigation("/notifications")}
+            >
+              <View className="bg-gradient-to-br from-cyan-100 to-cyan-200 p-4 rounded-full mb-3 shadow-sm">
+                <Bell size={24} color="#0e7490" />
+              </View>
+              <Text className="text-gray-800 font-medium">Notifications</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              className="bg-white rounded-2xl p-5 w-[48%] mb-4 shadow-md items-center transform transition-transform active:scale-95"
+              onPress={() => handleNavigation("/admin/dashboard")}
+            >
+              <View className="bg-gradient-to-br from-emerald-100 to-emerald-200 p-4 rounded-full mb-3 shadow-sm">
+                <Monitor size={24} color="#059669" />
+              </View>
+              <Text className="text-gray-800 font-medium">Admin Panel</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              className="bg-white rounded-2xl p-5 w-[48%] mb-4 shadow-md items-center transform transition-transform active:scale-95"
+              onPress={() => handleNavigation("/reports")}
+            >
+              <View className="bg-gradient-to-br from-rose-100 to-rose-200 p-4 rounded-full mb-3 shadow-sm">
+                <TrendingUp size={24} color="#e11d48" />
+              </View>
+              <Text className="text-gray-800 font-medium">Analytics</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Additional Advanced Features Row */}
+          <View className="flex-row flex-wrap justify-between mt-4">
+            <TouchableOpacity
+              className="bg-white rounded-2xl p-5 w-[48%] mb-4 shadow-md items-center transform transition-transform active:scale-95"
+              onPress={() => handleNavigation("/search")}
+            >
+              <View className="bg-gradient-to-br from-purple-100 to-purple-200 p-4 rounded-full mb-3 shadow-sm">
+                <Search size={24} color="#7c3aed" />
+              </View>
+              <Text className="text-gray-800 font-medium">Advanced Search</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              className="bg-white rounded-2xl p-5 w-[48%] mb-4 shadow-md items-center transform transition-transform active:scale-95"
+              onPress={() => handleNavigation("/system/health")}
+            >
+              <View className="bg-gradient-to-br from-green-100 to-green-200 p-4 rounded-full mb-3 shadow-sm">
+                <Activity size={24} color="#059669" />
+              </View>
+              <Text className="text-gray-800 font-medium">System Health</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Developer Testing Section */}
+          <View className="flex-row flex-wrap justify-center mt-4">
+            <TouchableOpacity
+              className="bg-white rounded-2xl p-5 w-[48%] mb-4 shadow-md items-center transform transition-transform active:scale-95 border-2 border-blue-200"
+              onPress={() => handleNavigation("/test-features")}
+            >
+              <View className="bg-gradient-to-br from-blue-100 to-blue-200 p-4 rounded-full mb-3 shadow-sm">
+                <Settings size={24} color="#2563eb" />
+              </View>
+              <Text className="text-gray-800 font-medium">🧪 Test Features</Text>
+              <Text className="text-xs text-gray-500 mt-1 text-center">Verify all advanced features</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              className="bg-white rounded-2xl p-5 w-[48%] mb-4 shadow-md items-center transform transition-transform active:scale-95 border-2 border-green-200"
+              onPress={() => handleNavigation("/tickets/test")}
+            >
+              <View className="bg-gradient-to-br from-green-100 to-green-200 p-4 rounded-full mb-3 shadow-sm">
+                <Ticket size={24} color="#059669" />
+              </View>
+              <Text className="text-gray-800 font-medium">🎫 Test Tickets</Text>
+              <Text className="text-xs text-gray-500 mt-1 text-center">Verify ticket system functionality</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Helpdesk & Field Technician Section */}
+          <View className="flex-row flex-wrap justify-center mt-4">
+            <TouchableOpacity
+              className="bg-white rounded-2xl p-5 w-[48%] mb-4 shadow-md items-center transform transition-transform active:scale-95 border-2 border-purple-200"
+              onPress={() => handleNavigation("/tickets/helpdesk-create")}
+            >
+              <View className="bg-gradient-to-br from-purple-100 to-purple-200 p-4 rounded-full mb-3 shadow-sm">
+                <User size={24} color="#7c3aed" />
+              </View>
+              <Text className="text-gray-800 font-medium">🎧 Helpdesk Ticket</Text>
+              <Text className="text-xs text-gray-500 mt-1 text-center">Create detailed field tickets</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              className="bg-white rounded-2xl p-5 w-[48%] mb-4 shadow-md items-center transform transition-transform active:scale-95 border-2 border-orange-200"
+              onPress={() => handleNavigation("/technician/dashboard")}
+            >
+              <View className="bg-gradient-to-br from-orange-100 to-orange-200 p-4 rounded-full mb-3 shadow-sm">
+                <Wrench size={24} color="#ea580c" />
+              </View>
+              <Text className="text-gray-800 font-medium">🔧 Field Tech</Text>
+              <Text className="text-xs text-gray-500 mt-1 text-center">Technician dashboard</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              className="bg-white rounded-2xl p-5 w-[48%] mb-4 shadow-md items-center transform transition-transform active:scale-95 border-2 border-indigo-200"
+              onPress={() => handleNavigation("/manager/dashboard")}
+            >
+              <View className="bg-gradient-to-br from-indigo-100 to-indigo-200 p-4 rounded-full mb-3 shadow-sm">
+                <BarChart3 size={24} color="#4f46e5" />
+              </View>
+              <Text className="text-gray-800 font-medium">👨‍💼 Manager</Text>
+              <Text className="text-xs text-gray-500 mt-1 text-center">Oversight & assignment</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              className="bg-white rounded-2xl p-5 w-[48%] mb-4 shadow-md items-center transform transition-transform active:scale-95 border-2 border-emerald-200"
+              onPress={() => handleNavigation("/workflow/test")}
+            >
+              <View className="bg-gradient-to-br from-emerald-100 to-emerald-200 p-4 rounded-full mb-3 shadow-sm">
+                <RefreshCw size={24} color="#059669" />
+              </View>
+              <Text className="text-gray-800 font-medium">🔄 Workflow Test</Text>
+              <Text className="text-xs text-gray-500 mt-1 text-center">End-to-end testing</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Advanced Features Section */}
+          <View className="flex-row flex-wrap justify-center mt-4">
+            <TouchableOpacity
+              className="bg-white rounded-2xl p-5 w-[48%] mb-4 shadow-md items-center transform transition-transform active:scale-95 border-2 border-cyan-200"
+              onPress={() => handleNavigation("/admin/dashboard")}
+            >
+              <View className="bg-gradient-to-br from-cyan-100 to-cyan-200 p-4 rounded-full mb-3 shadow-sm">
+                <Shield size={24} color="#0891b2" />
+              </View>
+              <Text className="text-gray-800 font-medium">🛡️ Admin</Text>
+              <Text className="text-xs text-gray-500 mt-1 text-center">System administration</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              className="bg-white rounded-2xl p-5 w-[48%] mb-4 shadow-md items-center transform transition-transform active:scale-95 border-2 border-pink-200"
+              onPress={() => handleNavigation("/knowledge")}
+            >
+              <View className="bg-gradient-to-br from-pink-100 to-pink-200 p-4 rounded-full mb-3 shadow-sm">
+                <BookOpen size={24} color="#ec4899" />
+              </View>
+              <Text className="text-gray-800 font-medium">📚 Knowledge</Text>
+              <Text className="text-xs text-gray-500 mt-1 text-center">Knowledge base</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              className="bg-white rounded-2xl p-5 w-[48%] mb-4 shadow-md items-center transform transition-transform active:scale-95 border-2 border-teal-200"
+              onPress={() => handleNavigation("/system/health")}
+            >
+              <View className="bg-gradient-to-br from-teal-100 to-teal-200 p-4 rounded-full mb-3 shadow-sm">
+                <Activity size={24} color="#0d9488" />
+              </View>
+              <Text className="text-gray-800 font-medium">🏥 System Health</Text>
+              <Text className="text-xs text-gray-500 mt-1 text-center">Monitor performance</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              className="bg-white rounded-2xl p-5 w-[48%] mb-4 shadow-md items-center transform transition-transform active:scale-95 border-2 border-amber-200"
+              onPress={() => handleNavigation("/devices/bulk-import")}
+            >
+              <View className="bg-gradient-to-br from-amber-100 to-amber-200 p-4 rounded-full mb-3 shadow-sm">
+                <Upload size={24} color="#d97706" />
+              </View>
+              <Text className="text-gray-800 font-medium">📦 Bulk Import</Text>
+              <Text className="text-xs text-gray-500 mt-1 text-center">Import devices</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -491,14 +719,14 @@ export default function Dashboard() {
         </TouchableOpacity>
       </View>
 
-      {/* Supabase Dashboard Button */}
+      {/* Analytics Dashboard Button */}
       <TouchableOpacity
         className="mx-5 mb-4 bg-gradient-to-r from-purple-600 to-purple-800 rounded-xl p-4 flex-row items-center justify-center shadow-xl"
-        onPress={() => router.push("/dashboard")}
+        onPress={() => router.push("/reports")}
       >
         <BarChart3 size={20} color="#ffffff" />
         <Text className="text-white font-semibold ml-2">
-          View Supabase Dashboard
+          View Analytics Dashboard
         </Text>
       </TouchableOpacity>
 

@@ -51,7 +51,7 @@ interface TicketData {
   device: DeviceOption | null;
   diagnosticInfo: string;
   restaurant: RestaurantOption | null;
-  priority: "low" | "medium" | "high";
+  priority: "low" | "medium" | "high" | "critical";
   photos: string[];
 }
 
@@ -174,7 +174,7 @@ const CreateTicketForm = ({ onSubmit, onCancel, isSubmitting = false }: CreateTi
       Alert.alert("Incomplete Form", "Please fill in all required fields");
       return;
     }
-    
+
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
     if (onSubmit) {
@@ -220,14 +220,14 @@ const CreateTicketForm = ({ onSubmit, onCancel, isSubmitting = false }: CreateTi
       if (!result.canceled && result.assets && result.assets.length > 0) {
         // Upload each image sequentially
         setLoading(prev => ({ ...prev, imageUpload: true }));
-        
+
         for (const asset of result.assets) {
           await uploadImage(asset);
         }
-        
+
         setLoading(prev => ({ ...prev, imageUpload: false }));
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        
+
         if (result.assets.length > 1) {
           Alert.alert('Success', `${result.assets.length} images uploaded successfully`);
         }
@@ -250,19 +250,19 @@ const CreateTicketForm = ({ onSubmit, onCancel, isSubmitting = false }: CreateTi
       if (!loading.imageUpload) {
         setLoading(prev => ({ ...prev, imageUpload: true }));
       }
-      
+
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
       // Compress image if it's too large (limit to 2MB)
       let base64Data = imageAsset.base64;
       const MAX_SIZE = 2 * 1024 * 1024; // 2MB
-      
+
       // Create a unique file name with timestamp and random string
       const timestamp = Date.now();
       const randomString = Math.random().toString(36).substring(2, 8);
       const fileName = `ticket-photo-${timestamp}-${randomString}.jpg`;
       const filePath = `tickets/${user?.id || 'anonymous'}/${fileName}`;
-      
+
       // Upload image to Supabase Storage
       const { data, error } = await supabase.storage
         .from('ticket-photos')
@@ -277,7 +277,7 @@ const CreateTicketForm = ({ onSubmit, onCancel, isSubmitting = false }: CreateTi
           // Try with a different filename if duplicate
           const newFileName = `ticket-photo-${timestamp}-${Math.random().toString(36).substring(2, 8)}.jpg`;
           const newFilePath = `tickets/${user?.id || 'anonymous'}/${newFileName}`;
-          
+
           const { data: retryData, error: retryError } = await supabase.storage
             .from('ticket-photos')
             .upload(newFilePath, decode(base64Data), {
@@ -285,14 +285,14 @@ const CreateTicketForm = ({ onSubmit, onCancel, isSubmitting = false }: CreateTi
               cacheControl: '3600',
               upsert: false,
             });
-            
+
           if (retryError) throw retryError;
-          
+
           if (retryData) {
             const { data: retryPublicUrlData } = supabase.storage
               .from('ticket-photos')
               .getPublicUrl(newFilePath);
-              
+
             if (retryPublicUrlData && retryPublicUrlData.publicUrl) {
               updateTicketData('photos', [...ticketData.photos, retryPublicUrlData.publicUrl]);
             }
@@ -325,20 +325,20 @@ const CreateTicketForm = ({ onSubmit, onCancel, isSubmitting = false }: CreateTi
   const removePhoto = async (index: number) => {
     try {
       const photoUrl = ticketData.photos[index];
-      
+
       // Show loading indicator
       setLoading(prev => ({ ...prev, imageUpload: true }));
-      
+
       // Extract the file path from the URL
       const storageUrl = 'https://mxbebraqpukeanginfxr.supabase.co/storage/v1/object/public/ticket-photos/';
       if (photoUrl.startsWith(storageUrl)) {
         const filePath = photoUrl.replace(storageUrl, '');
-        
+
         // Delete the file from storage
         const { error } = await supabase.storage
           .from('ticket-photos')
           .remove([filePath]);
-          
+
         if (error) {
           console.error('Error removing from storage:', error);
           // Continue with UI removal even if storage deletion fails
@@ -349,7 +349,7 @@ const CreateTicketForm = ({ onSubmit, onCancel, isSubmitting = false }: CreateTi
       const updatedPhotos = [...ticketData.photos];
       updatedPhotos.splice(index, 1);
       updateTicketData('photos', updatedPhotos);
-      
+
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
       console.error('Error removing photo:', error);
@@ -393,31 +393,32 @@ const CreateTicketForm = ({ onSubmit, onCancel, isSubmitting = false }: CreateTi
               Select the priority level for this issue
             </Text>
             <View className="flex-row justify-between">
-              {["low", "medium", "high"].map((priority) => (
+              {[
+                { key: "low", label: "Low", color: "bg-green-500" },
+                { key: "medium", label: "Medium", color: "bg-amber-500" },
+                { key: "high", label: "High", color: "bg-orange-500" },
+                { key: "critical", label: "Critical", color: "bg-red-500" }
+              ].map((priority) => (
                 <TouchableOpacity
-                  key={priority}
+                  key={priority.key}
                   className={`flex-1 py-3 mx-1 rounded-lg ${
-                    ticketData.priority === priority
-                      ? priority === "high"
-                        ? "bg-red-500"
-                        : priority === "medium"
-                        ? "bg-amber-500"
-                        : "bg-green-500"
+                    ticketData.priority === priority.key
+                      ? priority.color
                       : "bg-gray-200"
                   }`}
                   onPress={() => {
-                    updateTicketData("priority", priority);
+                    updateTicketData("priority", priority.key);
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                   }}
                 >
                   <Text
-                    className={`text-center font-medium ${
-                      ticketData.priority === priority
+                    className={`text-center font-medium text-xs ${
+                      ticketData.priority === priority.key
                         ? "text-white"
                         : "text-gray-700"
                     }`}
                   >
-                    {priority.charAt(0).toUpperCase() + priority.slice(1)}
+                    {priority.label}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -716,7 +717,7 @@ const CreateTicketForm = ({ onSubmit, onCancel, isSubmitting = false }: CreateTi
         ticketData.diagnosticInfo.trim().length > 0
       );
     }
-    
+
     // Check validation for current step
     switch (currentStep) {
       case 0:
@@ -741,10 +742,10 @@ const CreateTicketForm = ({ onSubmit, onCancel, isSubmitting = false }: CreateTi
 
     try {
       setCreatingDevice(true);
-      
+
       // Get the restaurant ID - either from the modal or from the selected restaurant
       const restaurantId = newDevice.restaurant_id || ticketData.restaurant?.id;
-      
+
       if (!restaurantId) {
         Alert.alert("Error", "Please select a restaurant");
         setCreatingDevice(false);
@@ -775,15 +776,15 @@ const CreateTicketForm = ({ onSubmit, onCancel, isSubmitting = false }: CreateTi
           name: data[0].name,
           type: data[0].type,
         };
-        
+
         setDevices((prev) => [...prev, newDeviceOption]);
-        
+
         // Select the new device
         updateTicketData("device", newDeviceOption);
-        
+
         // Close the modal
         setShowAddDeviceModal(false);
-        
+
         // Reset the new device form
         setNewDevice({
           name: "",
@@ -791,7 +792,7 @@ const CreateTicketForm = ({ onSubmit, onCancel, isSubmitting = false }: CreateTi
           serial_number: "",
           restaurant_id: "",
         });
-        
+
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         Alert.alert("Success", "New device created successfully");
       }
@@ -817,12 +818,12 @@ const CreateTicketForm = ({ onSubmit, onCancel, isSubmitting = false }: CreateTi
       const insertData: any = {
         name: newRestaurant.name,
       };
-      
+
       // Add location if provided
       if (newRestaurant.location) {
         insertData.location = newRestaurant.location;
       }
-      
+
       // Add custom ID if provided
       if (newRestaurant.id) {
         insertData.id = newRestaurant.id;
@@ -846,22 +847,22 @@ const CreateTicketForm = ({ onSubmit, onCancel, isSubmitting = false }: CreateTi
           name: data[0].name,
           location: data[0].location,
         };
-        
+
         setRestaurants((prev) => [...prev, newRestaurantOption]);
-        
+
         // Select the new restaurant
         updateTicketData("restaurant", newRestaurantOption);
-        
+
         // Close the modal
         setShowAddRestaurantModal(false);
-        
+
         // Reset the new restaurant form
         setNewRestaurant({
           id: "",
           name: "",
           location: "",
         });
-        
+
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         Alert.alert("Success", "New restaurant created successfully");
       }
@@ -937,7 +938,7 @@ const CreateTicketForm = ({ onSubmit, onCancel, isSubmitting = false }: CreateTi
         <View className="flex-1 justify-center items-center bg-black/50">
           <View className="bg-white w-11/12 p-6 rounded-xl">
             <Text className="text-xl font-bold mb-4">Add New Device</Text>
-            
+
             {/* Display selected restaurant info */}
             {ticketData.restaurant && (
               <View className="bg-blue-50 p-3 rounded-lg mb-4">
@@ -953,20 +954,20 @@ const CreateTicketForm = ({ onSubmit, onCancel, isSubmitting = false }: CreateTi
             {ticketData.restaurant && (
               <View className="mb-4">
                 <Text className="font-medium mb-1">Or choose a different restaurant:</Text>
-                <TouchableOpacity 
+                <TouchableOpacity
                   className="bg-gray-100 p-4 rounded-lg flex-row justify-between items-center"
                   onPress={() => setShowRestaurantDropdown(true)}
                 >
                   <Text>
-                    {newDevice.restaurant_id 
-                      ? restaurants.find(r => r.id === newDevice.restaurant_id)?.name || "Select a restaurant" 
+                    {newDevice.restaurant_id
+                      ? restaurants.find(r => r.id === newDevice.restaurant_id)?.name || "Select a restaurant"
                       : "Use selected restaurant"}
                   </Text>
                   <ChevronDown size={20} color="#333" />
                 </TouchableOpacity>
               </View>
             )}
-            
+
             <Text className="font-medium mb-1">Device Name</Text>
             <TextInput
               className="bg-gray-100 p-3 rounded-lg mb-4"
@@ -974,7 +975,7 @@ const CreateTicketForm = ({ onSubmit, onCancel, isSubmitting = false }: CreateTi
               value={newDevice.name}
               onChangeText={(text) => setNewDevice((prev) => ({ ...prev, name: text }))}
             />
-            
+
             <Text className="font-medium mb-1">Device Type</Text>
             <TextInput
               className="bg-gray-100 p-3 rounded-lg mb-4"
@@ -982,7 +983,7 @@ const CreateTicketForm = ({ onSubmit, onCancel, isSubmitting = false }: CreateTi
               value={newDevice.type}
               onChangeText={(text) => setNewDevice((prev) => ({ ...prev, type: text }))}
             />
-            
+
             <Text className="font-medium mb-1">Serial Number</Text>
             <TextInput
               className="bg-gray-100 p-3 rounded-lg mb-6"
@@ -990,7 +991,7 @@ const CreateTicketForm = ({ onSubmit, onCancel, isSubmitting = false }: CreateTi
               value={newDevice.serial_number}
               onChangeText={(text) => setNewDevice((prev) => ({ ...prev, serial_number: text }))}
             />
-            
+
             <View className="flex-row justify-end gap-4">
               <TouchableOpacity
                 className="bg-gray-200 px-4 py-2 rounded-lg"
@@ -1006,7 +1007,7 @@ const CreateTicketForm = ({ onSubmit, onCancel, isSubmitting = false }: CreateTi
               >
                 <Text className="text-gray-800">Cancel</Text>
               </TouchableOpacity>
-              
+
               <TouchableOpacity
                 className="bg-blue-600 px-4 py-2 rounded-lg"
                 onPress={handleCreateDevice}
@@ -1032,7 +1033,7 @@ const CreateTicketForm = ({ onSubmit, onCancel, isSubmitting = false }: CreateTi
         <View className="flex-1 justify-center items-center bg-black/50">
           <View className="bg-white w-11/12 p-6 rounded-xl max-h-80">
             <Text className="text-xl font-bold mb-4">Select Restaurant</Text>
-            
+
             <TouchableOpacity
               className="bg-blue-100 p-3 rounded-lg mb-2 flex-row justify-between items-center"
               onPress={() => {
@@ -1072,7 +1073,7 @@ const CreateTicketForm = ({ onSubmit, onCancel, isSubmitting = false }: CreateTi
                 </TouchableOpacity>
               )}
             />
-            
+
             <TouchableOpacity
               className="bg-gray-200 p-3 rounded-lg mt-2 items-center"
               onPress={() => setShowRestaurantDropdown(false)}
@@ -1092,7 +1093,7 @@ const CreateTicketForm = ({ onSubmit, onCancel, isSubmitting = false }: CreateTi
         <View className="flex-1 justify-center items-center bg-black/50">
           <View className="bg-white w-11/12 p-6 rounded-xl">
             <Text className="text-xl font-bold mb-4">Add New Restaurant</Text>
-            
+
             <Text className="font-medium mb-1">Restaurant ID (Optional)</Text>
             <TextInput
               className="bg-gray-100 p-3 rounded-lg mb-4"
@@ -1100,7 +1101,7 @@ const CreateTicketForm = ({ onSubmit, onCancel, isSubmitting = false }: CreateTi
               value={newRestaurant.id}
               onChangeText={(text) => setNewRestaurant((prev) => ({ ...prev, id: text }))}
             />
-            
+
             <Text className="font-medium mb-1">Restaurant Name</Text>
             <TextInput
               className="bg-gray-100 p-3 rounded-lg mb-4"
@@ -1116,7 +1117,7 @@ const CreateTicketForm = ({ onSubmit, onCancel, isSubmitting = false }: CreateTi
               value={newRestaurant.location}
               onChangeText={(text) => setNewRestaurant((prev) => ({ ...prev, location: text }))}
             />
-            
+
             <View className="flex-row justify-end gap-4">
               <TouchableOpacity
                 className="bg-gray-200 px-4 py-2 rounded-lg"
@@ -1131,7 +1132,7 @@ const CreateTicketForm = ({ onSubmit, onCancel, isSubmitting = false }: CreateTi
               >
                 <Text className="text-gray-800">Cancel</Text>
               </TouchableOpacity>
-              
+
               <TouchableOpacity
                 className="bg-blue-600 px-4 py-2 rounded-lg"
                 onPress={handleCreateRestaurant}
