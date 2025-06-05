@@ -50,7 +50,7 @@ export default function StockMovementScreen() {
   const [selectedEquipment, setSelectedEquipment] = useState<string>('');
   const [allEquipment, setAllEquipment] = useState<EquipmentItem[]>([]);
   const [showEquipmentDropdown, setShowEquipmentDropdown] = useState(false);
-  
+
   const [formData, setFormData] = useState({
     movementType: 'in' as 'in' | 'out' | 'transfer',
     quantity: '',
@@ -149,8 +149,8 @@ export default function StockMovementScreen() {
     try {
       setSaving(true);
 
-      const newStockLevel = formData.movementType === 'in' 
-        ? equipment.stock_level + quantity 
+      const newStockLevel = formData.movementType === 'in'
+        ? equipment.stock_level + quantity
         : equipment.stock_level - quantity;
 
       // Create movement record
@@ -160,9 +160,12 @@ export default function StockMovementScreen() {
           equipment_id: equipment.id,
           movement_type: formData.movementType,
           quantity: quantity,
+          reason: formData.movementType === 'in' ? 'Stock In' : formData.movementType === 'out' ? 'Stock Out' : 'Transfer',
+          destination: formData.movementType === 'transfer' ? formData.newLocation : null,
           notes: formData.notes || null,
-          previous_level: equipment.stock_level,
-          new_level: newStockLevel,
+          previous_stock: equipment.stock_level,
+          new_stock: newStockLevel,
+          timestamp: new Date().toISOString(),
         }]);
 
       if (movementError) throw movementError;
@@ -251,7 +254,7 @@ export default function StockMovementScreen() {
         {/* Equipment Selection */}
         <View className="bg-white rounded-xl p-4 mb-4 shadow-sm">
           <Text className="text-lg font-bold text-gray-800 mb-4">Select Equipment</Text>
-          
+
           <TouchableOpacity
             onPress={() => setShowEquipmentDropdown(!showEquipmentDropdown)}
             className="border border-gray-200 rounded-lg px-3 py-3 flex-row justify-between items-center"
@@ -286,18 +289,18 @@ export default function StockMovementScreen() {
         {equipment && (
           <View className="bg-white rounded-xl p-4 mb-4 shadow-sm">
             <Text className="text-lg font-bold text-gray-800 mb-3">Current Status</Text>
-            
+
             <View className="space-y-2">
               <View className="flex-row items-center">
                 <Package size={16} color="#6B7280" />
                 <Text className="text-gray-700 ml-2">Type: {equipment.type}</Text>
               </View>
-              
+
               <View className="flex-row items-center">
                 <BarChart3 size={16} color="#6B7280" />
                 <Text className="text-gray-700 ml-2">Current Stock: {equipment.stock_level}</Text>
               </View>
-              
+
               {equipment.warehouse_location && (
                 <View className="flex-row items-center">
                   <MapPin size={16} color="#6B7280" />
@@ -311,12 +314,12 @@ export default function StockMovementScreen() {
         {/* Movement Type */}
         <View className="bg-white rounded-xl p-4 mb-4 shadow-sm">
           <Text className="text-lg font-bold text-gray-800 mb-4">Movement Type</Text>
-          
+
           <View className="flex-row space-x-3">
             <TouchableOpacity
               className={`flex-1 p-3 rounded-lg border-2 ${
-                formData.movementType === 'in' 
-                  ? 'border-green-500 bg-green-50' 
+                formData.movementType === 'in'
+                  ? 'border-green-500 bg-green-50'
                   : 'border-gray-200 bg-gray-50'
               }`}
               onPress={() => setFormData({ ...formData, movementType: 'in' })}
@@ -333,8 +336,8 @@ export default function StockMovementScreen() {
 
             <TouchableOpacity
               className={`flex-1 p-3 rounded-lg border-2 ${
-                formData.movementType === 'out' 
-                  ? 'border-red-500 bg-red-50' 
+                formData.movementType === 'out'
+                  ? 'border-red-500 bg-red-50'
                   : 'border-gray-200 bg-gray-50'
               }`}
               onPress={() => setFormData({ ...formData, movementType: 'out' })}
@@ -351,8 +354,8 @@ export default function StockMovementScreen() {
 
             <TouchableOpacity
               className={`flex-1 p-3 rounded-lg border-2 ${
-                formData.movementType === 'transfer' 
-                  ? 'border-blue-500 bg-blue-50' 
+                formData.movementType === 'transfer'
+                  ? 'border-blue-500 bg-blue-50'
                   : 'border-gray-200 bg-gray-50'
               }`}
               onPress={() => setFormData({ ...formData, movementType: 'transfer' })}
@@ -372,7 +375,7 @@ export default function StockMovementScreen() {
         {/* Quantity */}
         <View className="bg-white rounded-xl p-4 mb-4 shadow-sm">
           <Text className="text-lg font-bold text-gray-800 mb-4">Quantity</Text>
-          
+
           <TextInput
             className="border border-gray-200 rounded-lg px-4 py-3 text-gray-800 text-lg"
             placeholder="Enter quantity"
@@ -386,7 +389,7 @@ export default function StockMovementScreen() {
         {formData.movementType === 'transfer' && (
           <View className="bg-white rounded-xl p-4 mb-4 shadow-sm">
             <Text className="text-lg font-bold text-gray-800 mb-4">New Location</Text>
-            
+
             <View className="border border-gray-200 rounded-lg">
               {warehouses.map((warehouse) => (
                 <TouchableOpacity
@@ -410,7 +413,7 @@ export default function StockMovementScreen() {
         {/* Notes */}
         <View className="bg-white rounded-xl p-4 mb-6 shadow-sm">
           <Text className="text-lg font-bold text-gray-800 mb-4">Notes (Optional)</Text>
-          
+
           <TextInput
             className="border border-gray-200 rounded-lg px-4 py-3 text-gray-800"
             placeholder="Enter movement notes"

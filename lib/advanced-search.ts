@@ -196,12 +196,7 @@ class AdvancedSearchService {
           technician:users(id, name, email)
         `);
       case 'tickets':
-        return query.select(`
-          *,
-          device:devices(id, name, serial_number),
-          assigned_to:users(id, name, email),
-          created_by:users(id, name, email)
-        `);
+        return query.select('*');
       case 'notifications':
         return query.select(`
           *,

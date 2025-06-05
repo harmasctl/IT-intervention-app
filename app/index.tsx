@@ -61,10 +61,11 @@ export default function Dashboard() {
 
     // Set up real-time subscription for tickets
     const ticketsSubscription = supabase
-      .channel('tickets-changes')
+      .channel('dashboard-tickets-changes')
       .on('postgres_changes',
         { event: '*', schema: 'public', table: 'tickets' },
-        () => {
+        (payload) => {
+          console.log('Dashboard ticket change received:', payload);
           // Refresh stats when tickets change
           fetchDashboardStats();
         }

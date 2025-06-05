@@ -59,6 +59,8 @@ export default function TicketDetailScreen() {
   const [sendingComment, setSendingComment] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState<number>(0);
   const [showGallery, setShowGallery] = useState<boolean>(false);
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -77,22 +79,43 @@ export default function TicketDetailScreen() {
   const fetchTicketDetails = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+
+      // First fetch the ticket
+      const { data: ticketData, error: ticketError } = await supabase
         .from("tickets")
-        .select(`
-          *,
-          devices(*),
-          restaurants(*),
-          created_by_user:users!created_by(id, name, email),
-          assigned_to_user:users!assigned_to(id, name, email)
-        `)
+        .select("*")
         .eq("id", id)
         .single();
 
-      if (error) throw error;
+      if (ticketError) throw ticketError;
 
-      if (data) {
-        setTicket(data);
+      if (ticketData) {
+        // Fetch related data separately
+        const [deviceData, restaurantData, createdByData, assignedToData] = await Promise.all([
+          ticketData.device_id ?
+            supabase.from("devices").select("*").eq("id", ticketData.device_id).single() :
+            { data: null, error: null },
+          ticketData.restaurant_id ?
+            supabase.from("restaurants").select("*").eq("id", ticketData.restaurant_id).single() :
+            { data: null, error: null },
+          ticketData.created_by ?
+            supabase.from("users").select("id, name, email").eq("id", ticketData.created_by).single() :
+            { data: null, error: null },
+          ticketData.assigned_to ?
+            supabase.from("users").select("id, name, email").eq("id", ticketData.assigned_to).single() :
+            { data: null, error: null }
+        ]);
+
+        // Combine the data
+        const combinedTicket = {
+          ...ticketData,
+          devices: deviceData.data,
+          restaurants: restaurantData.data,
+          created_by_user: createdByData.data,
+          assigned_to_user: assignedToData.data,
+        };
+
+        setTicket(combinedTicket);
       }
     } catch (error) {
       console.error("Error fetching ticket details:", error);
@@ -105,19 +128,38 @@ export default function TicketDetailScreen() {
   const fetchTicketHistory = async () => {
     try {
       setLoadingHistory(true);
-      const { data, error } = await supabase
+
+      // First fetch ticket history
+      const { data: historyData, error: historyError } = await supabase
         .from("ticket_history")
-        .select(`
-          *,
-          user:users(name, email)
-        `)
+        .select("*")
         .eq("ticket_id", id)
         .order("timestamp", { ascending: false });
 
-      if (error) throw error;
+      if (historyError) throw historyError;
 
-      if (data) {
-        setTicketHistory(data);
+      if (historyData && historyData.length > 0) {
+        // Get unique user IDs
+        const userIds = [...new Set(historyData.map(h => h.user_id).filter(Boolean))];
+
+        // Fetch user data separately
+        const { data: usersData } = await supabase
+          .from("users")
+          .select("id, name, email")
+          .in("id", userIds);
+
+        // Create user lookup map
+        const userMap = new Map(usersData?.map(u => [u.id, u]) || []);
+
+        // Combine the data
+        const combinedHistory = historyData.map(history => ({
+          ...history,
+          user: userMap.get(history.user_id) || null,
+        }));
+
+        setTicketHistory(combinedHistory);
+      } else {
+        setTicketHistory([]);
       }
     } catch (error) {
       console.error("Error fetching ticket history:", error);
@@ -151,13 +193,47 @@ export default function TicketDetailScreen() {
 
 
 
-  const handleStatusChange = (newStatus: string) => {
-    // Update local state immediately for better UX
-    setTicket({
-      ...ticket,
-      status: newStatus,
-      updated_at: new Date().toISOString(),
-    });
+  const handleStatusChange = async (newStatus: string) => {
+    try {
+      setUpdatingStatus(true);
+
+      // Update local state immediately for better UX
+      setTicket({
+        ...ticket,
+        status: newStatus,
+        updated_at: new Date().toISOString(),
+      });
+
+      const { error } = await supabase
+        .from("tickets")
+        .update({
+          status: newStatus,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", id);
+
+      if (error) throw error;
+
+      // Add to ticket history
+      await supabase.from("ticket_history").insert([
+        {
+          ticket_id: id,
+          action: "status_changed",
+          details: `Status changed to ${newStatus}`,
+          user_id: user?.id,
+          timestamp: new Date().toISOString(),
+        },
+      ]);
+
+      Alert.alert("Success", `Ticket status updated to ${newStatus}`);
+    } catch (error) {
+      console.error("Error updating status:", error);
+      Alert.alert("Error", "Failed to update ticket status");
+      // Revert the optimistic update
+      fetchTicketDetails();
+    } finally {
+      setUpdatingStatus(false);
+    }
   };
 
   const getPriorityColor = (priority: string) => {
@@ -480,11 +556,7 @@ export default function TicketDetailScreen() {
           </View>
         </View>
 
-        <TicketAssignment
-          ticketId={ticket.id}
-          currentAssignedTo={ticket.assigned_to}
-          onAssignmentChange={fetchTicketDetails}
-        />
+
 
         <View className="mb-4">
           <Text className="text-gray-700 font-medium mb-2">Device</Text>

@@ -82,6 +82,7 @@ export default function EquipmentInventoryScreen() {
   const [filteredEquipment, setFilteredEquipment] = useState<EquipmentItem[]>([]);
   const [showFilters, setShowFilters] = useState(false);
   const [equipmentTypes, setEquipmentTypes] = useState<string[]>(["All"]);
+  const [warehouseDistribution, setWarehouseDistribution] = useState<{[key: string]: {[key: string]: number}}>({});
 
   useEffect(() => {
     fetchEquipment();
@@ -97,6 +98,22 @@ export default function EquipmentInventoryScreen() {
         (payload) => {
           console.log("Equipment change received:", payload);
           fetchEquipment();
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "equipment_movements" },
+        (payload) => {
+          console.log("Movement change received:", payload);
+          fetchEquipment();
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "suppliers" },
+        (payload) => {
+          console.log("Supplier change received:", payload);
+          // Refresh if needed
         },
       )
       .subscribe();
@@ -157,8 +174,10 @@ export default function EquipmentInventoryScreen() {
 
       if (data && data.length > 0) {
         setEquipment(data as EquipmentItem[]);
+        calculateWarehouseDistribution(data as EquipmentItem[]);
       } else {
         setEquipment([]);
+        setWarehouseDistribution({});
       }
     } catch (error) {
       console.error("Error fetching equipment:", error);
@@ -168,6 +187,21 @@ export default function EquipmentInventoryScreen() {
       setLoading(false);
     }
   }, []);
+
+  const calculateWarehouseDistribution = (equipmentData: EquipmentItem[]) => {
+    const distribution: {[key: string]: {[key: string]: number}} = {};
+
+    equipmentData.forEach(item => {
+      if (!distribution[item.name]) {
+        distribution[item.name] = {};
+      }
+
+      const warehouse = item.warehouse_location || 'Unassigned';
+      distribution[item.name][warehouse] = (distribution[item.name][warehouse] || 0) + item.stock_level;
+    });
+
+    setWarehouseDistribution(distribution);
+  };
 
   const filterEquipment = () => {
     let filtered = [...equipment];
@@ -508,6 +542,22 @@ export default function EquipmentInventoryScreen() {
               </Text>
             </View>
           )}
+
+          {/* Warehouse Distribution */}
+          {warehouseDistribution[item.name] && Object.keys(warehouseDistribution[item.name]).length > 1 && (
+            <View className="mt-2">
+              <Text className="text-gray-500 text-xs mb-1">Distribution:</Text>
+              <View className="flex-row flex-wrap">
+                {Object.entries(warehouseDistribution[item.name])
+                  .filter(([warehouse, count]) => count > 0)
+                  .map(([warehouse, count]) => (
+                  <View key={warehouse} className="bg-blue-50 px-2 py-1 rounded mr-2 mb-1">
+                    <Text className="text-blue-700 text-xs">{warehouse}: {count}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
         </View>
       </View>
     </TouchableOpacity>
@@ -735,13 +785,7 @@ export default function EquipmentInventoryScreen() {
             <Barcode size={20} color="white" />
             <Text className="text-white font-medium ml-2">Scan Equipment</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            className="flex-1 flex-row items-center justify-center bg-amber-600 p-3 rounded-xl ml-2"
-            onPress={() => router.push("/equipment/movement")}
-          >
-            <ArrowUp size={20} color="white" />
-            <Text className="text-white font-medium ml-2">Stock Movement</Text>
-          </TouchableOpacity>
+
         </View>
 
         <View className="flex-row">

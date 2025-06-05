@@ -44,6 +44,23 @@ export default function LowStockScreen() {
 
   useEffect(() => {
     fetchLowStockItems();
+
+    // Set up real-time subscription for equipment changes
+    const subscription = supabase
+      .channel("low-stock-equipment-changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "equipment_inventory" },
+        (payload) => {
+          console.log("Equipment change received:", payload);
+          fetchLowStockItems();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const fetchLowStockItems = async () => {
@@ -54,12 +71,16 @@ export default function LowStockScreen() {
         .from('equipment_inventory')
         .select('*')
         .not('min_stock_level', 'is', null)
-        .filter('stock_level', 'lte', 'min_stock_level')
         .order('stock_level', { ascending: true });
 
       if (error) throw error;
 
-      setLowStockItems(data || []);
+      // Filter items where stock_level <= min_stock_level on the client side
+      const filteredData = data?.filter(item =>
+        item.min_stock_level && item.stock_level <= item.min_stock_level
+      ) || [];
+
+      setLowStockItems(filteredData);
     } catch (error) {
       console.error('Error fetching low stock items:', error);
       Alert.alert('Error', 'Failed to load low stock items');
@@ -76,7 +97,7 @@ export default function LowStockScreen() {
 
   const handleQuickRestock = (item: LowStockItem) => {
     const suggestedQuantity = (item.max_stock_level || item.min_stock_level * 2) - item.stock_level;
-    
+
     Alert.alert(
       'Quick Restock',
       `Restock ${item.name}?\n\nCurrent: ${item.stock_level}\nSuggested: +${suggestedQuantity} units`,
@@ -107,12 +128,14 @@ export default function LowStockScreen() {
         .from('equipment_movements')
         .insert({
           equipment_id: item.id,
-          action_type: 'stock_in',
+          movement_type: 'in',
           quantity: quantity,
+          reason: 'Quick Restock',
           previous_stock: item.stock_level,
           new_stock: newStockLevel,
           notes: 'Quick restock from low stock alert',
-          location_to: item.warehouse_location || 'Main Warehouse',
+          destination: item.warehouse_location || 'Main Warehouse',
+          timestamp: new Date().toISOString(),
         });
 
       if (movementError) throw movementError;
@@ -169,7 +192,7 @@ export default function LowStockScreen() {
             {item.stock_level === 0 ? 'OUT OF STOCK' : 'LOW STOCK'}
           </Text>
         </View>
-        
+
         {/* Stock Level Bar */}
         <View className="mt-2 bg-gray-200 rounded-full h-2">
           <View
@@ -207,7 +230,7 @@ export default function LowStockScreen() {
           <Plus size={16} color="#ffffff" />
           <Text className="text-white font-medium ml-2">Quick Restock</Text>
         </TouchableOpacity>
-        
+
         <TouchableOpacity
           className="flex-1 bg-green-500 rounded-lg p-3 flex-row items-center justify-center"
           onPress={() => router.push(`/equipment/purchase-order?item_id=${item.id}`)}

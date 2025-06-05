@@ -7,8 +7,10 @@ import {
   Alert,
   ScrollView,
   Modal,
+  Image,
 } from "react-native";
-import { ArrowLeft, Camera, X } from "lucide-react-native";
+import { ArrowLeft, Camera, X, Image as ImageIcon, Upload } from "lucide-react-native";
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from "expo-router";
 import { supabase } from "../lib/supabase";
 import BarcodeScanner from "../components/BarcodeScanner";
@@ -47,6 +49,8 @@ export default function AddEquipmentForm({
   const [barcodeId, setBarcodeId] = useState("");
   const [showQuickAddType, setShowQuickAddType] = useState(false);
   const [showQuickAddSupplier, setShowQuickAddSupplier] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
 
 
@@ -110,6 +114,34 @@ export default function AddEquipmentForm({
     fetchWarehouses();
   }, []);
 
+  const fetchTypes = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("equipment_types")
+        .select("id, name")
+        .order("name");
+
+      if (error) throw error;
+      setTypeOptions(data || []);
+    } catch (error) {
+      console.error("Error fetching types:", error);
+    }
+  };
+
+  const fetchSuppliers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("suppliers")
+        .select("id, name")
+        .order("name");
+
+      if (error) throw error;
+      setSupplierOptions(data || []);
+    } catch (error) {
+      console.error("Error fetching suppliers:", error);
+    }
+  };
+
   const handleTypeAdded = (typeName: string) => {
     setType(typeName);
     fetchTypes(); // Refresh the types list
@@ -118,6 +150,98 @@ export default function AddEquipmentForm({
   const handleSupplierAdded = (supplierName: string) => {
     setSupplier(supplierName);
     fetchSuppliers(); // Refresh the suppliers list
+  };
+
+  const pickImage = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please grant camera roll permissions to upload images.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setSelectedImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to pick image');
+    }
+  };
+
+  const takePhoto = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please grant camera permissions to take photos.');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setSelectedImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error taking photo:', error);
+      Alert.alert('Error', 'Failed to take photo');
+    }
+  };
+
+  const showImagePicker = () => {
+    Alert.alert(
+      'Select Image',
+      'Choose how you want to add an image',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Camera', onPress: takePhoto },
+        { text: 'Gallery', onPress: pickImage },
+      ]
+    );
+  };
+
+  const uploadImage = async (imageUri: string): Promise<string | null> => {
+    try {
+      setUploadingImage(true);
+
+      const fileExt = imageUri.split('.').pop();
+      const fileName = `${Date.now()}.${fileExt}`;
+      const filePath = `images/${fileName}`;
+
+      // Convert image to blob for upload
+      const response = await fetch(imageUri);
+      const blob = await response.blob();
+
+      const { error: uploadError } = await supabase.storage
+        .from('equipment')
+        .upload(filePath, blob);
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data } = supabase.storage
+        .from('equipment')
+        .getPublicUrl(filePath);
+
+      return data.publicUrl;
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      Alert.alert('Error', 'Failed to upload image');
+      return null;
+    } finally {
+      setUploadingImage(false);
+    }
   };
 
   const handleSubmit = async () => {
@@ -139,6 +263,12 @@ export default function AddEquipmentForm({
     try {
       setLoading(true);
 
+      // Upload image if selected
+      let imageUrl = null;
+      if (selectedImage) {
+        imageUrl = await uploadImage(selectedImage);
+      }
+
       const newEquipment = {
         name,
         type,
@@ -150,6 +280,7 @@ export default function AddEquipmentForm({
         max_stock_level: maxStockLevel ? parseInt(maxStockLevel) : parseInt(stockLevel) * 2,
         cost: cost ? parseFloat(cost) : 0,
         sku: barcodeId || `SKU-${Date.now()}`, // Use scanned barcode or generate SKU
+        image_url: imageUrl,
       };
 
       const { data, error } = await supabase
@@ -268,6 +399,35 @@ export default function AddEquipmentForm({
               onChangeText={setCost}
               keyboardType="decimal-pad"
             />
+          </View>
+
+          {/* Equipment Image */}
+          <View className="mb-4">
+            <Text className="text-gray-700 mb-1 font-medium">Equipment Image</Text>
+            <TouchableOpacity
+              className="border border-gray-300 rounded-lg p-4 items-center justify-center bg-gray-50"
+              onPress={showImagePicker}
+              disabled={uploadingImage}
+            >
+              {selectedImage ? (
+                <View className="items-center">
+                  <Image
+                    source={{ uri: selectedImage }}
+                    className="w-24 h-24 rounded-lg mb-2"
+                    resizeMode="cover"
+                  />
+                  <Text className="text-blue-600 font-medium">Tap to change image</Text>
+                </View>
+              ) : (
+                <View className="items-center">
+                  <ImageIcon size={32} color="#9CA3AF" />
+                  <Text className="text-gray-500 mt-2">
+                    {uploadingImage ? "Uploading..." : "Tap to add image"}
+                  </Text>
+                  <Text className="text-gray-400 text-sm mt-1">Camera or Gallery</Text>
+                </View>
+              )}
+            </TouchableOpacity>
           </View>
 
           <View className="mb-4">

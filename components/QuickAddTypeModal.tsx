@@ -49,7 +49,13 @@ export default function QuickAddTypeModal({
           color: selectedColor,
         }]);
 
-      if (error) throw error;
+      if (error) {
+        if (error.code === '23505') {
+          Alert.alert('Error', 'An equipment type with this name already exists');
+          return;
+        }
+        throw error;
+      }
 
       Alert.alert('Success', 'Equipment type created successfully');
       onSuccess(name.trim());

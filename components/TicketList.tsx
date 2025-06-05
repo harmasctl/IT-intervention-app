@@ -17,6 +17,7 @@ import {
   ChevronRight,
   Search,
   MapPin,
+  User,
 } from "lucide-react-native";
 
 type Priority = "low" | "medium" | "high";
@@ -54,8 +55,25 @@ const TicketList = ({ onTicketPress = () => {} }: TicketListProps) => {
       .channel('ticket-list-changes')
       .on('postgres_changes',
         { event: '*', schema: 'public', table: 'tickets' },
-        () => {
+        (payload) => {
+          console.log('Ticket change received:', payload);
           // Refresh tickets when any ticket changes
+          fetchTickets();
+        }
+      )
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'devices' },
+        (payload) => {
+          console.log('Device change received:', payload);
+          // Refresh tickets when devices change (affects device names)
+          fetchTickets();
+        }
+      )
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'restaurants' },
+        (payload) => {
+          console.log('Restaurant change received:', payload);
+          // Refresh tickets when restaurants change (affects restaurant names)
           fetchTickets();
         }
       )
@@ -69,26 +87,51 @@ const TicketList = ({ onTicketPress = () => {} }: TicketListProps) => {
   const fetchTickets = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase.from("tickets").select(`
-          *,
-          restaurants:restaurant_id(name),
-          devices:device_id(name),
-          assigned_user:users!assigned_to(name),
-          created_by_user:users!created_by(name, email)
-        `);
 
-      if (error) throw error;
+      // First fetch tickets without joins
+      const { data: ticketsData, error: ticketsError } = await supabase
+        .from("tickets")
+        .select("*")
+        .order("created_at", { ascending: false });
 
-      if (data && data.length > 0) {
+      if (ticketsError) throw ticketsError;
+
+      if (ticketsData && ticketsData.length > 0) {
+        // Get unique restaurant and device IDs
+        const restaurantIds = [...new Set(ticketsData.map(t => t.restaurant_id).filter(Boolean))];
+        const deviceIds = [...new Set(ticketsData.map(t => t.device_id).filter(Boolean))];
+        const userIds = [...new Set([
+          ...ticketsData.map(t => t.assigned_to).filter(Boolean),
+          ...ticketsData.map(t => t.created_by).filter(Boolean)
+        ])];
+
+        // Fetch related data separately
+        const [restaurantsData, devicesData, usersData] = await Promise.all([
+          restaurantIds.length > 0 ?
+            supabase.from("restaurants").select("id, name").in("id", restaurantIds) :
+            { data: [], error: null },
+          deviceIds.length > 0 ?
+            supabase.from("devices").select("id, name").in("id", deviceIds) :
+            { data: [], error: null },
+          userIds.length > 0 ?
+            supabase.from("users").select("id, name, email").in("id", userIds) :
+            { data: [], error: null }
+        ]);
+
+        // Create lookup maps
+        const restaurantMap = new Map(restaurantsData.data?.map(r => [r.id, r]) || []);
+        const deviceMap = new Map(devicesData.data?.map(d => [d.id, d]) || []);
+        const userMap = new Map(usersData.data?.map(u => [u.id, u]) || []);
+
         // Transform data to match the expected format
-        const formattedTickets = data.map((ticket) => ({
+        const formattedTickets = ticketsData.map((ticket) => ({
           id: ticket.id,
           title: ticket.title,
           priority: ticket.priority,
-          restaurantName: ticket.restaurants?.name || "Unknown Restaurant",
-          deviceAffected: ticket.devices?.name || "Unknown Device",
-          assignedTo: ticket.assigned_user?.name || null,
-          createdBy: ticket.created_by_user?.name || ticket.created_by_user?.email || null,
+          restaurantName: restaurantMap.get(ticket.restaurant_id)?.name || "Unknown Restaurant",
+          deviceAffected: deviceMap.get(ticket.device_id)?.name || "Unknown Device",
+          assignedTo: userMap.get(ticket.assigned_to)?.name || null,
+          createdBy: userMap.get(ticket.created_by)?.name || userMap.get(ticket.created_by)?.email || null,
           status: ticket.status,
           createdAt: ticket.created_at,
         }));
@@ -140,12 +183,45 @@ const TicketList = ({ onTicketPress = () => {} }: TicketListProps) => {
     switch (status) {
       case "new":
         return <AlertCircle size={16} color="#ef4444" />;
+      case "assigned":
+        return <User size={16} color="#3b82f6" />;
       case "in-progress":
         return <Clock size={16} color="#eab308" />;
       case "resolved":
         return <CheckCircle size={16} color="#22c55e" />;
       default:
-        return null;
+        return <AlertCircle size={16} color="#6b7280" />;
+    }
+  };
+
+  const getStatusColor = (status: Status) => {
+    switch (status) {
+      case "new":
+        return "bg-red-100 text-red-800 border-red-200";
+      case "assigned":
+        return "bg-blue-100 text-blue-800 border-blue-200";
+      case "in-progress":
+        return "bg-yellow-100 text-yellow-800 border-yellow-200";
+      case "resolved":
+        return "bg-green-100 text-green-800 border-green-200";
+      default:
+        return "bg-gray-100 text-gray-800 border-gray-200";
+    }
+  };
+
+  const getAssignmentStatus = (ticket: Ticket) => {
+    if (ticket.assignedTo) {
+      return {
+        text: `Assigned to ${ticket.assignedTo}`,
+        color: "bg-blue-50 text-blue-700 border-blue-200",
+        icon: <User size={14} color="#1d4ed8" />
+      };
+    } else {
+      return {
+        text: "Unassigned",
+        color: "bg-orange-50 text-orange-700 border-orange-200",
+        icon: <AlertCircle size={14} color="#c2410c" />
+      };
     }
   };
 
@@ -175,20 +251,30 @@ const TicketList = ({ onTicketPress = () => {} }: TicketListProps) => {
             </Text>
           </View>
 
-          <View className="flex-row items-center justify-between">
-            <View className="bg-blue-50 rounded-xl px-3 py-2 flex-row items-center">
+          {/* Status and Assignment Display */}
+          <View className="space-y-2">
+            {/* Status Badge */}
+            <View className={`rounded-xl px-3 py-2 flex-row items-center border ${getStatusColor(item.status)}`}>
               {getStatusIcon(item.status)}
-              <Text className="ml-2 text-sm text-blue-700 font-medium capitalize">
-                {item.status}
+              <Text className="ml-2 text-sm font-medium capitalize">
+                {item.status.replace('-', ' ')}
+              </Text>
+            </View>
+
+            {/* Assignment Status */}
+            <View className={`rounded-xl px-3 py-2 flex-row items-center border ${getAssignmentStatus(item).color}`}>
+              {getAssignmentStatus(item).icon}
+              <Text className="ml-2 text-sm font-medium">
+                {getAssignmentStatus(item).text}
               </Text>
             </View>
 
             {/* Creator Information */}
             {item.createdBy && (
-              <View className="flex-row items-center">
+              <View className="flex-row items-center bg-gray-50 rounded-lg px-2 py-1">
                 <User size={12} color="#6b7280" />
-                <Text className="text-gray-500 text-xs ml-1">
-                  {item.createdBy}
+                <Text className="text-gray-600 text-xs ml-1">
+                  Created by {item.createdBy}
                 </Text>
               </View>
             )}
@@ -243,7 +329,7 @@ const TicketList = ({ onTicketPress = () => {} }: TicketListProps) => {
       {/* Enhanced Filter tabs */}
       <View className="bg-white rounded-2xl mb-6 p-2 shadow-lg border border-gray-100">
         <View className="flex-row">
-          {["all", "new", "in-progress", "resolved"].map((filter) => (
+          {["all", "new", "assigned", "in-progress", "resolved"].map((filter) => (
             <TouchableOpacity
               key={filter}
               className={`flex-1 py-3 px-4 rounded-xl mx-1 ${

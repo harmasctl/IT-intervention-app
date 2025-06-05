@@ -201,13 +201,7 @@ class DataExportService {
           technician:users(id, name, email, phone)
         `);
       case 'tickets':
-        return query.select(`
-          *,
-          device:devices(id, name, serial_number),
-          assigned_to:users(id, name, email),
-          created_by:users(id, name, email),
-          restaurant:restaurants(id, name)
-        `);
+        return query.select('*');
       default:
         return query.select('*');
     }

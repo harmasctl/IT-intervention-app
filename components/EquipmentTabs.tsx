@@ -1,9 +1,9 @@
 import React from "react";
 import { View, Text, TouchableOpacity, ScrollView } from "react-native";
 import { useRouter } from "expo-router";
-import { Package, History, Building2, BarChart3, AlertTriangle, Warehouse, Tag } from "lucide-react-native";
+import { Package, History, Building2, BarChart3, AlertTriangle, Warehouse, Tag, ArrowUpDown, Truck, Zap } from "lucide-react-native";
 
-type Tab = "inventory" | "history" | "suppliers" | "reports" | "low-stock" | "warehouses" | "types";
+type Tab = "inventory" | "history" | "suppliers" | "reports" | "low-stock" | "warehouses" | "types" | "bulk-movement" | "transfer" | "advanced";
 
 interface EquipmentTabsProps {
   activeTab: Tab;
@@ -24,6 +24,24 @@ const EquipmentTabs = ({ activeTab }: EquipmentTabsProps) => {
       label: "Movements",
       icon: History,
       route: "/equipment/history",
+    },
+    {
+      id: "bulk-movement" as Tab,
+      label: "Bulk Move",
+      icon: ArrowUpDown,
+      route: "/equipment/bulk-movement",
+    },
+    {
+      id: "transfer" as Tab,
+      label: "Transfer",
+      icon: Truck,
+      route: "/equipment/transfer",
+    },
+    {
+      id: "advanced" as Tab,
+      label: "Advanced",
+      icon: Zap,
+      route: "/equipment/advanced",
     },
     {
       id: "suppliers" as Tab,

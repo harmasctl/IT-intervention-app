@@ -5,6 +5,8 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  TextInput,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -16,6 +18,9 @@ import {
   MapPin,
   Tag,
   BarChart3,
+  Edit,
+  X,
+  Search,
 } from 'lucide-react-native';
 import { supabase } from '../../lib/supabase';
 import BarcodeScanner from '../../components/BarcodeScanner';
@@ -38,6 +43,8 @@ export default function ScanEquipmentScreen() {
   const [showScanner, setShowScanner] = useState(false);
   const [loading, setLoading] = useState(false);
   const [scannedEquipment, setScannedEquipment] = useState<ScannedEquipment | null>(null);
+  const [showManualEntry, setShowManualEntry] = useState(false);
+  const [manualCode, setManualCode] = useState('');
 
   const handleScan = async (code: string, type: string) => {
     setShowScanner(false);
@@ -81,6 +88,17 @@ export default function ScanEquipmentScreen() {
     }
   };
 
+  const handleManualSearch = async () => {
+    if (!manualCode.trim()) {
+      Alert.alert('Error', 'Please enter a code to search');
+      return;
+    }
+
+    setShowManualEntry(false);
+    await handleScan(manualCode.trim(), 'manual');
+    setManualCode('');
+  };
+
   const handleQuickAction = (action: string) => {
     if (!scannedEquipment) return;
 
@@ -118,12 +136,20 @@ export default function ScanEquipmentScreen() {
               <Text className="text-blue-100 text-sm">Scan barcodes to find equipment</Text>
             </View>
           </View>
-          <TouchableOpacity
-            className="bg-white/20 p-3 rounded-2xl backdrop-blur-sm"
-            onPress={() => setShowScanner(true)}
-          >
-            <Camera size={24} color="#ffffff" />
-          </TouchableOpacity>
+          <View className="flex-row">
+            <TouchableOpacity
+              className="bg-white/20 p-3 rounded-2xl backdrop-blur-sm mr-2"
+              onPress={() => setShowManualEntry(true)}
+            >
+              <Edit size={24} color="#ffffff" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              className="bg-white/20 p-3 rounded-2xl backdrop-blur-sm"
+              onPress={() => setShowScanner(true)}
+            >
+              <Camera size={24} color="#ffffff" />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -217,7 +243,7 @@ export default function ScanEquipmentScreen() {
             {/* Quick Actions */}
             <View className="bg-white rounded-xl p-6 shadow-sm">
               <Text className="text-lg font-bold text-gray-800 mb-4">Quick Actions</Text>
-              
+
               <View className="space-y-3">
                 <TouchableOpacity
                   className="bg-blue-50 p-4 rounded-lg flex-row items-center"
@@ -263,13 +289,23 @@ export default function ScanEquipmentScreen() {
             <Text className="text-gray-400 text-center mb-8 mx-8">
               Tap the camera button to scan equipment barcodes or QR codes
             </Text>
-            <TouchableOpacity
-              className="bg-blue-600 rounded-xl px-8 py-4 flex-row items-center"
-              onPress={() => setShowScanner(true)}
-            >
-              <Camera size={24} color="#ffffff" />
-              <Text className="text-white font-bold text-lg ml-2">Start Scanning</Text>
-            </TouchableOpacity>
+            <View className="space-y-4">
+              <TouchableOpacity
+                className="bg-blue-600 rounded-xl px-8 py-4 flex-row items-center justify-center"
+                onPress={() => setShowScanner(true)}
+              >
+                <Camera size={24} color="#ffffff" />
+                <Text className="text-white font-bold text-lg ml-2">Start Scanning</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                className="bg-gray-600 rounded-xl px-8 py-4 flex-row items-center justify-center"
+                onPress={() => setShowManualEntry(true)}
+              >
+                <Edit size={24} color="#ffffff" />
+                <Text className="text-white font-bold text-lg ml-2">Manual Entry</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
       </View>
@@ -282,6 +318,63 @@ export default function ScanEquipmentScreen() {
           mode="equipment"
         />
       )}
+
+      {/* Manual Entry Modal */}
+      <Modal
+        visible={showManualEntry}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowManualEntry(false)}
+      >
+        <View className="flex-1 bg-white">
+          <View className="flex-row justify-between items-center px-6 py-4 border-b border-gray-200">
+            <TouchableOpacity onPress={() => setShowManualEntry(false)}>
+              <X size={24} color="#6B7280" />
+            </TouchableOpacity>
+            <Text className="text-xl font-bold text-gray-800">Manual Entry</Text>
+            <TouchableOpacity onPress={handleManualSearch}>
+              <Search size={24} color="#3B82F6" />
+            </TouchableOpacity>
+          </View>
+
+          <View className="flex-1 px-6 py-6">
+            <Text className="text-lg font-bold text-gray-800 mb-4">Enter Equipment Code</Text>
+            <Text className="text-gray-600 mb-6">
+              Enter the SKU, barcode, or equipment name to search
+            </Text>
+
+            <View className="mb-6">
+              <TextInput
+                className="border border-gray-300 rounded-lg px-4 py-3 text-lg"
+                placeholder="Enter SKU, barcode, or name..."
+                value={manualCode}
+                onChangeText={setManualCode}
+                autoFocus
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
+
+            <TouchableOpacity
+              className={`bg-blue-600 rounded-xl p-4 flex-row items-center justify-center ${
+                !manualCode.trim() ? 'opacity-50' : ''
+              }`}
+              onPress={handleManualSearch}
+              disabled={!manualCode.trim()}
+            >
+              <Search size={20} color="#ffffff" />
+              <Text className="text-white font-bold text-lg ml-2">Search Equipment</Text>
+            </TouchableOpacity>
+
+            <View className="mt-8 p-4 bg-blue-50 rounded-lg">
+              <Text className="text-blue-800 font-medium mb-2">Search Tips:</Text>
+              <Text className="text-blue-700 text-sm">• Enter the exact SKU for best results</Text>
+              <Text className="text-blue-700 text-sm">• You can also search by equipment name</Text>
+              <Text className="text-blue-700 text-sm">• Search is case-insensitive</Text>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

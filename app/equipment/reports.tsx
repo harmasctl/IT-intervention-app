@@ -70,14 +70,14 @@ export default function EquipmentReportsScreen() {
       const { data: movements, error: movementsError } = await supabase
         .from('equipment_movements')
         .select('*')
-        .gte('created_at', thirtyDaysAgo.toISOString());
+        .gte('timestamp', thirtyDaysAgo.toISOString());
 
       if (movementsError) throw movementsError;
 
       // Calculate statistics
       const totalItems = equipment?.length || 0;
       const totalValue = equipment?.reduce((sum, item) => sum + ((item.cost || 0) * item.stock_level), 0) || 0;
-      const lowStockItems = equipment?.filter(item => 
+      const lowStockItems = equipment?.filter(item =>
         item.min_stock_level && item.stock_level <= item.min_stock_level
       ).length || 0;
       const criticalItems = equipment?.filter(item => item.is_critical).length || 0;
@@ -106,14 +106,14 @@ export default function EquipmentReportsScreen() {
         date.setMonth(date.getMonth() - i);
         const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
         const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0);
-        
+
         const monthMovements = movements?.filter(m => {
-          const movementDate = new Date(m.created_at);
+          const movementDate = new Date(m.timestamp);
           return movementDate >= monthStart && movementDate <= monthEnd;
         }) || [];
 
-        const inMovements = monthMovements.filter(m => m.action_type === 'stock_in').length;
-        const outMovements = monthMovements.filter(m => m.action_type === 'stock_out').length;
+        const inMovements = monthMovements.filter(m => m.movement_type === 'in').length;
+        const outMovements = monthMovements.filter(m => m.movement_type === 'out').length;
 
         monthlyMovements.push({
           month: date.toLocaleDateString('en-US', { month: 'short' }),

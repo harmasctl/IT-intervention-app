@@ -118,18 +118,44 @@ export default function TicketAssignment({
   const fetchAssignmentHistory = async () => {
     try {
       setLoadingHistory(true);
-      const { data, error } = await supabase
+      // First fetch assignments
+      const { data: assignmentsData, error } = await supabase
         .from("ticket_assignments")
-        .select(`
-          *,
-          assigned_to_user:users!assigned_to(id, name, email, role),
-          assigned_by_user:users!assigned_by(id, name, email, role)
-        `)
+        .select("*")
         .eq("ticket_id", ticketId)
         .order("assigned_at", { ascending: false });
 
       if (error) throw error;
-      setAssignments(data || []);
+
+      if (assignmentsData && assignmentsData.length > 0) {
+        // Get unique user IDs
+        const userIds = [...new Set([
+          ...assignmentsData.map(a => a.assigned_to).filter(Boolean),
+          ...assignmentsData.map(a => a.assigned_by).filter(Boolean)
+        ])];
+
+        // Fetch user data separately
+        const { data: usersData } = await supabase
+          .from("users")
+          .select("id, name, email, role")
+          .in("id", userIds);
+
+        // Create user lookup map
+        const userMap = new Map(usersData?.map(u => [u.id, u]) || []);
+
+        // Combine the data
+        const combinedAssignments = assignmentsData.map(assignment => ({
+          ...assignment,
+          assigned_to_user: userMap.get(assignment.assigned_to) || null,
+          assigned_by_user: userMap.get(assignment.assigned_by) || null,
+        }));
+
+        setAssignments(combinedAssignments);
+      } else {
+        setAssignments([]);
+      }
+
+
     } catch (error) {
       console.error("Error fetching assignment history:", error);
       Alert.alert("Error", "Failed to load assignment history");

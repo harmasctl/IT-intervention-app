@@ -79,6 +79,23 @@ export default function BulkMovementScreen() {
 
   useEffect(() => {
     fetchEquipment();
+
+    // Set up real-time subscription for equipment changes
+    const subscription = supabase
+      .channel("bulk-movement-equipment-changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "equipment_inventory" },
+        (payload) => {
+          console.log("Equipment change received:", payload);
+          fetchEquipment();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, [sourceWarehouse, sourceWarehouseName, movementType]);
 
   useEffect(() => {
@@ -246,11 +263,14 @@ export default function BulkMovementScreen() {
               equipment_id: item.equipmentId,
               movement_type: movementType,
               quantity: item.quantity,
+              reason: movementType === "in" ? "Bulk Stock In" : "Bulk Stock Out",
+              destination: movementType === "in" && destinationWarehouseName ? destinationWarehouseName : null,
               notes: `${movementType === "in" ? "Bulk receive" : "Bulk dispatch"} - ${notes || "No notes"}`,
-              previous_level: item.currentQuantity,
-              new_level: movementType === "in"
+              previous_stock: item.currentQuantity,
+              new_stock: movementType === "in"
                 ? item.currentQuantity + item.quantity
                 : item.currentQuantity - item.quantity,
+              timestamp: new Date().toISOString(),
             },
           ]);
 
@@ -590,23 +610,39 @@ export default function BulkMovementScreen() {
             )}
 
             {movementType === "in" && (
-              <TouchableOpacity
-                className="bg-blue-600 py-2 rounded-lg items-center mt-4 flex-row justify-center"
-                onPress={() => {
-                  setSelectedItems([
-                    ...selectedItems,
-                    {
-                      equipmentId: "", // Will be created on submit
-                      name: "",
-                      quantity: 1,
-                      currentQuantity: 0,
-                    },
-                  ]);
-                }}
-              >
-                <Plus size={20} color="white" className="mr-2" />
-                <Text className="text-white font-medium">Add Item</Text>
-              </TouchableOpacity>
+              <View>
+                <Text className="text-gray-700 mb-2">Add Equipment for Receiving:</Text>
+                <View className="flex-row items-center bg-gray-100 rounded-lg px-3 py-2 mb-3">
+                  <Search size={20} color="#4b5563" />
+                  <TextInput
+                    className="flex-1 ml-2"
+                    placeholder="Search equipment to add..."
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                  />
+                </View>
+
+                {loading ? (
+                  <View className="py-4 items-center">
+                    <ActivityIndicator size="small" color="#1e40af" />
+                    <Text className="text-gray-500 mt-2">Loading equipment...</Text>
+                  </View>
+                ) : filteredEquipment.length > 0 ? (
+                  <View className="max-h-40 mb-3">
+                    <FlatList
+                      data={filteredEquipment}
+                      renderItem={renderEquipmentItem}
+                      keyExtractor={(item) => item.id}
+                      nestedScrollEnabled
+                    />
+                  </View>
+                ) : (
+                  <View className="py-4 items-center">
+                    <Package size={24} color="#9ca3af" />
+                    <Text className="text-gray-500 mt-2">No equipment found</Text>
+                  </View>
+                )}
+              </View>
             )}
           </View>
         ) : null}
